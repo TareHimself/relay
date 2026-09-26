@@ -1,0 +1,1 @@
+ALTER TABLE `pages` ADD `tags` text DEFAULT '[]' NOT NULL;

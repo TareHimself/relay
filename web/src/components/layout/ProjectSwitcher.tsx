@@ -1,0 +1,110 @@
+import { css } from '@linaria/core'
+import { Box, Group, Menu, Skeleton, Text, UnstyledButton } from '@mantine/core'
+import { IconCheck, IconPlus, IconSelector } from '@tabler/icons-react'
+import { useState } from 'react'
+import { useNavigate } from 'react-router'
+import type { Project } from '@shared/pages'
+import { errorMessage } from '../../api/http'
+import { useCreateProject } from '../../api/queries'
+import { projectPath } from '../../lib/paths'
+import { NameDialog } from '../common/NameDialog'
+
+const trigger = css`
+  width: 100%;
+  padding: 8px;
+  border-radius: var(--mantine-radius-md);
+
+  &:hover {
+    background: var(--mantine-color-default-border);
+  }
+`
+const badge = css`
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--mantine-color-green-filled);
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+`
+
+interface ProjectSwitcherProps {
+  projects: Project[]
+  current: Project | undefined
+  loading: boolean
+}
+
+export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherProps) {
+  const navigate = useNavigate()
+  const create = useCreateProject()
+  const [creating, setCreating] = useState(false)
+
+  function createProject(name: string) {
+    create.mutate(
+      { name },
+      {
+        onSuccess: (project) => {
+          setCreating(false)
+          void navigate(projectPath(project.id))
+        },
+      },
+    )
+  }
+
+  return (
+    <>
+      <Menu width={248} position="bottom-start" shadow="md">
+        <Menu.Target>
+          <UnstyledButton className={trigger}>
+            <Group gap="xs" wrap="nowrap">
+              {loading ? (
+                <Skeleton height={26} width={26} radius={6} />
+              ) : (
+                <Box className={badge}>{(current?.name ?? '?').slice(0, 1).toUpperCase()}</Box>
+              )}
+              {loading ? (
+                <Skeleton height={14} flex={1} />
+              ) : (
+                <Text fw={600} size="sm" truncate flex={1}>
+                  {current?.name ?? 'Select a project'}
+                </Text>
+              )}
+              <IconSelector size={16} opacity={0.6} />
+            </Group>
+          </UnstyledButton>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Label>Projects</Menu.Label>
+          {projects.map((project) => (
+            <Menu.Item
+              key={project.id}
+              rightSection={project.id === current?.id ? <IconCheck size={14} /> : null}
+              onClick={() => void navigate(projectPath(project.id))}
+            >
+              {project.name}
+            </Menu.Item>
+          ))}
+          {projects.length > 0 && <Menu.Divider />}
+          <Menu.Item leftSection={<IconPlus size={14} />} onClick={() => setCreating(true)}>
+            New project
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+      <NameDialog
+        opened={creating}
+        title="New project"
+        label="Project name"
+        busy={create.isPending}
+        error={create.error ? errorMessage(create.error) : undefined}
+        onSubmit={createProject}
+        onClose={() => {
+          setCreating(false)
+          create.reset()
+        }}
+      />
+    </>
+  )
+}

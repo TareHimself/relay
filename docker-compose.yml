@@ -1,0 +1,13 @@
+services:
+  relay:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '${BIND:-127.0.0.1}:47821:47821'
+    volumes:
+      - ./data:/data
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env to create the admin on first start}
+      ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
+      ADMIN_NAME: ${ADMIN_NAME:-Admin}
+      TRUST_PROXY: ${TRUST_PROXY:-}
