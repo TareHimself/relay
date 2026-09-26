@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { createApp } from './http/app'
 import { RelayStore } from './store/relay-store'
 
+const EXAMPLE_PASSWORD = 'change-me-please'
+
 interface AdminEnv {
   ADMIN_PASSWORD?: string | undefined
   ADMIN_HANDLE?: string | undefined
@@ -13,6 +15,9 @@ interface AdminEnv {
 
 export async function bootstrapAdminFromEnv(store: RelayStore, env: AdminEnv): Promise<boolean> {
   if (store.accounts.hasAdmin() || !env.ADMIN_PASSWORD) return false
+  if (env.ADMIN_PASSWORD === EXAMPLE_PASSWORD) {
+    throw new Error('ADMIN_PASSWORD is still the example value from .env.example. Choose your own.')
+  }
   await store.accounts.bootstrapAdmin({
     handle: env.ADMIN_HANDLE || 'admin',
     displayName: env.ADMIN_NAME || undefined,

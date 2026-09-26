@@ -13,7 +13,7 @@ pnpm build
 ADMIN_PASSWORD='choose a long passphrase' pnpm start
 ```
 
-Open http://127.0.0.1:47821 and sign in as the admin (`ADMIN_HANDLE`, default `admin`). `ADMIN_PASSWORD` is only used to create the admin the first time; afterwards use `relay set-password`.
+Open http://127.0.0.1:47821 and sign in as the admin (`ADMIN_HANDLE`, default `admin`). The example password from `.env.example` is refused, so pick your own. `ADMIN_PASSWORD` is only used to create the admin the first time; afterwards use `relay set-password`.
 
 Development: `pnpm dev` (server, watches `src`) and `pnpm dev:web` (Vite UI). Checks: `pnpm check` (typecheck, lint, tests, format).
 

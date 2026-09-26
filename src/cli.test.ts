@@ -166,4 +166,12 @@ describe('server startup rules', () => {
     expect(await store.accounts.login('changed by cli!', 'test')).not.toBeNull()
     expect(await store.accounts.login('env password!', 'test')).toBeNull()
   })
+
+  it('refuses the example password from .env.example for a new admin', async () => {
+    const store = await tempStore()
+    await expect(
+      bootstrapAdminFromEnv(store, { ADMIN_PASSWORD: 'change-me-please' }),
+    ).rejects.toThrow('example value')
+    expect(store.accounts.hasAdmin()).toBe(false)
+  })
 })
