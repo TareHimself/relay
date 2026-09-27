@@ -1,3 +1,4 @@
+import { css } from '@linaria/core'
 import { TagsInput, Text } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
@@ -5,6 +6,18 @@ import type { Page } from '@shared/pages'
 import { normalizeTags } from '@shared/tags'
 import { errorMessage } from '../../api/http'
 import { keys, useProjectPages, useSetTags } from '../../api/queries'
+
+const pill = css`
+  background: var(--mantine-color-default-hover);
+  border: 1px solid var(--mantine-color-default-border);
+
+  & .mantine-Pill-label {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    line-height: normal;
+  }
+`
 
 interface DocTagsProps {
   page: Page
@@ -40,6 +53,7 @@ export function DocTags({ page, beforeChange }: DocTagsProps) {
       <TagsInput
         aria-label="Tags"
         variant="unstyled"
+        classNames={{ pill }}
         size="sm"
         placeholder={page.tags.length === 0 && pending === null ? 'Add tags' : ''}
         value={pending ?? page.tags}
