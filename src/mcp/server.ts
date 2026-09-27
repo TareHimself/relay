@@ -94,7 +94,7 @@ export function createMcpServer(workspace: Workspace): McpServer {
     'list_pages',
     {
       title: 'List pages',
-      description: 'List the pages in a project (id, title, path, url, revision, tags, preview).',
+      description: 'List the pages in a project (id, title, url, revision, tags, preview).',
       inputSchema: { projectId: z.string() },
     },
     ({ projectId }) => respond(() => workspace.listPages(projectId)),
@@ -125,7 +125,7 @@ export function createMcpServer(workspace: Workspace): McpServer {
     {
       title: 'Create page',
       description:
-        'Create a new page in a project. Returns the page metadata (id, path, url, revision, ' +
+        'Create a new page in a project. Returns the page metadata (id, url, revision, ' +
         'updatedAt, tags); pass includeBody to get the body back too. The markdown body and tags ' +
         'are optional. Send only the markdown body: frontmatter in it is rejected.',
       inputSchema: {
@@ -204,7 +204,7 @@ export function createMcpServer(workspace: Workspace): McpServer {
         'exactly once in the body) or { section, replace } (replaces the body under that heading ' +
         'up to the next heading of the same or higher level; the heading itself stays). Only the ' +
         'markdown body is edited: frontmatter in it is rejected. Pass ifRevision from your last ' +
-        'read to refuse the change if the page changed. Returns the page metadata (id, path, url, ' +
+        'read to refuse the change if the page changed. Returns the page metadata (id, url, ' +
         'revision, updatedAt, tags); pass includeBody to get the body back too. Conflicts return ' +
         'the current page in details.current so you can re-read and retry.',
       inputSchema: { id: z.string(), ...editInput.shape, includeBody: includeBodyFlag },

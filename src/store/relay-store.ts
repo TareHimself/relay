@@ -24,7 +24,13 @@ import { ThreadService } from './thread-service'
 import { rewriteHistory, type TidySummary } from './tidy'
 import type { Person } from '../shared/accounts'
 import { docHref } from '../shared/pages'
-import type { IndexProblem, Page, PageSummary, Project, StoreEvent } from '../shared/pages'
+import type {
+  IndexProblem,
+  Project,
+  StoredPage,
+  StoredPageSummary,
+  StoreEvent,
+} from '../shared/pages'
 import { parseThreads, threadsPathFor, type Thread } from '../core/threads'
 
 const migrationsFolder = ['../../drizzle', '../drizzle']
@@ -56,7 +62,7 @@ export interface PageChange {
 }
 
 interface LoadedPage {
-  page: Page
+  page: StoredPage
   file: string
 }
 
@@ -488,7 +494,7 @@ export class RelayStore {
 
   private async rebuildIndex(): Promise<void> {
     const projects: Array<Project & { path: string }> = []
-    const pages: PageSummary[] = []
+    const pages: StoredPageSummary[] = []
     const threadRows: Array<typeof schema.threads.$inferInsert> = []
     const searchable: Array<Parameters<SearchIndex['rebuild']>[1][number]> = []
     const problems: IndexProblem[] = []
@@ -715,11 +721,11 @@ export class RelayStore {
     return (this.publicUrl ?? '') + docHref(pageId)
   }
 
-  private summaryOf(row: typeof schema.pages.$inferSelect): PageSummary {
+  private summaryOf(row: typeof schema.pages.$inferSelect): StoredPageSummary {
     return { ...row, url: this.urlFor(row.id) }
   }
 
-  listPages(projectId: string): PageSummary[] {
+  listPages(projectId: string): StoredPageSummary[] {
     return this.orm
       .select()
       .from(schema.pages)
@@ -729,7 +735,7 @@ export class RelayStore {
       .map((row) => this.summaryOf(row))
   }
 
-  private pageRow(id: string): PageSummary {
+  private pageRow(id: string): StoredPageSummary {
     const row = this.orm.select().from(schema.pages).where(eq(schema.pages.id, id)).get()
     if (!row) throw new StoreError('not_found', 'Page not found')
     return this.summaryOf(row)
@@ -752,7 +758,7 @@ export class RelayStore {
     }
   }
 
-  async readPage(id: string): Promise<Page> {
+  async readPage(id: string): Promise<StoredPage> {
     return (await this.loadPage(id)).page
   }
 
@@ -762,7 +768,7 @@ export class RelayStore {
     body: string,
     actor: string,
     tags: readonly string[] = [],
-  ): Promise<Page> {
+  ): Promise<StoredPage> {
     assertNoFrontmatter(body)
     return this.serial(async () => {
       const project = this.orm
@@ -791,7 +797,7 @@ export class RelayStore {
     change: PageChange,
     ifRevision: string | undefined,
     actor: string,
-  ): Promise<Page> {
+  ): Promise<StoredPage> {
     const { edits, body } = change
     if (edits && body !== undefined) throw new StoreError('invalid', 'Pass edits or body, not both')
     if (!edits && body === undefined)
@@ -808,7 +814,7 @@ export class RelayStore {
     })
   }
 
-  replacePage(id: string, body: string, ifRevision: string, actor: string): Promise<Page> {
+  replacePage(id: string, body: string, ifRevision: string, actor: string): Promise<StoredPage> {
     return this.serial(async () => {
       const current = await this.loadPage(id)
       if (ifRevision !== current.page.revision)
@@ -825,7 +831,7 @@ export class RelayStore {
     tags: readonly string[],
     ifRevision: string | undefined,
     actor: string,
-  ): Promise<Page> {
+  ): Promise<StoredPage> {
     return this.serial(async () => {
       const current = await this.loadPage(id)
       if (ifRevision && ifRevision !== current.page.revision)
@@ -844,7 +850,7 @@ export class RelayStore {
     title: string,
     ifRevision: string | undefined,
     actor: string,
-  ): Promise<Page> {
+  ): Promise<StoredPage> {
     return this.serial(async () => {
       const trimmed = title.trim()
       if (!trimmed) throw new StoreError('invalid', 'Title cannot be empty')
@@ -895,7 +901,10 @@ export class RelayStore {
     return { hash: version.hash, body: parsePageFile(version.markdown).body }
   }
 
-  private async versionOf(page: Page, hash: string): Promise<{ hash: string; markdown: string }> {
+  private async versionOf(
+    page: StoredPage,
+    hash: string,
+  ): Promise<{ hash: string; markdown: string }> {
     if (!/^[0-9a-f]{7,40}$/.test(hash)) throw new StoreError('invalid', 'Use a commit hash')
     const full = (await this.repo.commitsTouching(page.path)).find((commit) =>
       commit.startsWith(hash),
@@ -904,7 +913,7 @@ export class RelayStore {
     return { hash: full, markdown: await this.repo.show(full, page.path) }
   }
 
-  restoreVersion(id: string, hash: string, ifRevision: string, actor: string): Promise<Page> {
+  restoreVersion(id: string, hash: string, ifRevision: string, actor: string): Promise<StoredPage> {
     return this.serial(async () => {
       const current = await this.loadPage(id)
       if (ifRevision !== current.page.revision)
@@ -922,7 +931,7 @@ export class RelayStore {
     next: string,
     actor: string,
     options: CommitOptions & { summary?: string } = {},
-  ): Promise<Page> {
+  ): Promise<StoredPage> {
     if (next === file) return page
     if (parsePageFile(next).id !== page.id) throw new StoreError('invalid', 'Page id cannot change')
     const event = newEvent('page.updated', actor, page.projectId, {

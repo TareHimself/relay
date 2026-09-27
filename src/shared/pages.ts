@@ -9,7 +9,6 @@ export const pageSummarySchema = z.object({
   id: z.string(),
   projectId: z.string(),
   title: z.string(),
-  path: z.string(),
   url: z.string(),
   revision: z.string(),
   excerpt: z.string(),
@@ -25,6 +24,16 @@ export function docHref(pageId: string): string {
 export type Project = z.infer<typeof projectSchema>
 export type PageSummary = z.infer<typeof pageSummarySchema>
 export type Page = z.infer<typeof pageSchema>
+
+// Internal-only: the store's own representation, with the git file path
+// attached. Never sent over the wire - callers get `url` instead, which
+// works as a link; `path` is meaningless off the filesystem/git repo.
+export interface StoredPageSummary extends PageSummary {
+  path: string
+}
+export interface StoredPage extends Page {
+  path: string
+}
 
 export interface OutlineEntry {
   text: string

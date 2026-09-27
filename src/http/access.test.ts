@@ -166,7 +166,7 @@ describe('rename routes', () => {
     )
   })
 
-  it('renames a page, moving its path, and enforces ifRevision', async () => {
+  it('renames a page, keeping its id but changing its title, and enforces ifRevision', async () => {
     const { admin, page } = await setup()
     const stale = await admin.send('PATCH', `/api/pages/${page.id}/title`, {
       title: 'New Title',
@@ -179,7 +179,8 @@ describe('rename routes', () => {
         ifRevision: page.revision,
       }),
     )
-    expect(renamed).toMatchObject({ id: page.id, title: 'New Title', path: 'alpha/new-title.md' })
+    expect(renamed).toMatchObject({ id: page.id, title: 'New Title' })
+    expect(renamed).not.toHaveProperty('path')
     expect((await admin.get(`/api/pages/${page.id}`)).status).toBe(200)
   })
 

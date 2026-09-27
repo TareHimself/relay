@@ -2,12 +2,30 @@ import type { Access } from './auth/access'
 import type { Person, SessionRecord, Whoami } from './shared/accounts'
 import { StoreError } from './core/errors'
 import { outlineOf } from './core/sections'
-import type { OutlineEntry, Page, PageSummary, Project, StoreEvent } from './shared/pages'
+import type {
+  OutlineEntry,
+  Page,
+  PageSummary,
+  Project,
+  StoredPage,
+  StoredPageSummary,
+  StoreEvent,
+} from './shared/pages'
 import type { Thread, ThreadStatus } from './shared/threads'
 import { searchKindSchema, type SearchHit, type SearchKind } from './shared/search'
 import type { TagCount } from './shared/tags'
 import type { PageChange, PageVersion, RelayStore } from './store/relay-store'
 import type { PageThread } from './store/thread-service'
+
+// path is the store's internal git file path - never useful off the
+// filesystem, so it never crosses into a public response. url is the
+// link a caller actually wants.
+function publicPage({ path: _path, ...page }: StoredPage): Page {
+  return page
+}
+function publicSummary({ path: _path, ...page }: StoredPageSummary): PageSummary {
+  return page
+}
 
 export interface EventsQuery {
   since?: string | undefined
@@ -107,10 +125,10 @@ export class Workspace {
 
   listPages(projectId: string): PageSummary[] {
     this.access.project(projectId)
-    return this.store.listPages(projectId)
+    return this.store.listPages(projectId).map(publicSummary)
   }
 
-  createPage(
+  async createPage(
     projectId: string,
     title: string,
     body: string,
@@ -118,13 +136,13 @@ export class Workspace {
   ): Promise<Page> {
     this.access.write()
     this.access.project(projectId)
-    return this.store.createPage(projectId, title, body, this.access.actor, tags)
+    return publicPage(await this.store.createPage(projectId, title, body, this.access.actor, tags))
   }
 
-  setTags(id: string, tags: readonly string[], ifRevision?: string): Promise<Page> {
+  async setTags(id: string, tags: readonly string[], ifRevision?: string): Promise<Page> {
     this.access.write()
     this.access.page(id)
-    return this.store.setTags(id, tags, ifRevision, this.access.actor)
+    return publicPage(await this.store.setTags(id, tags, ifRevision, this.access.actor))
   }
 
   listTags(projectId?: string): TagCount[] {
@@ -136,30 +154,31 @@ export class Workspace {
     options: { sinceRevision?: string | undefined; includeBody?: boolean | undefined } = {},
   ): Promise<PageRead> {
     this.access.page(id)
-    const page = await this.store.readPage(id)
-    if (options.sinceRevision && options.sinceRevision === page.revision) {
-      return { id: page.id, revision: page.revision, unchanged: true }
+    const stored = await this.store.readPage(id)
+    if (options.sinceRevision && options.sinceRevision === stored.revision) {
+      return { id: stored.id, revision: stored.revision, unchanged: true }
     }
+    const page = publicPage(stored)
     const outline = outlineOf(page.body)
     return options.includeBody === false ? { ...pageMetadata(page), outline } : { ...page, outline }
   }
 
-  editPage(id: string, change: PageChange, ifRevision?: string): Promise<Page> {
+  async editPage(id: string, change: PageChange, ifRevision?: string): Promise<Page> {
     this.access.write()
     this.access.page(id)
-    return this.store.editPage(id, change, ifRevision, this.access.actor)
+    return publicPage(await this.store.editPage(id, change, ifRevision, this.access.actor))
   }
 
-  replacePage(id: string, body: string, ifRevision: string): Promise<Page> {
+  async replacePage(id: string, body: string, ifRevision: string): Promise<Page> {
     this.access.write()
     this.access.page(id)
-    return this.store.replacePage(id, body, ifRevision, this.access.actor)
+    return publicPage(await this.store.replacePage(id, body, ifRevision, this.access.actor))
   }
 
-  renamePage(id: string, title: string, ifRevision?: string): Promise<Page> {
+  async renamePage(id: string, title: string, ifRevision?: string): Promise<Page> {
     this.access.write()
     this.access.page(id)
-    return this.store.renamePage(id, title, ifRevision, this.access.actor)
+    return publicPage(await this.store.renamePage(id, title, ifRevision, this.access.actor))
   }
 
   history(id: string) {
@@ -178,10 +197,10 @@ export class Workspace {
     return this.store.deletePage(id, ifRevision, this.access.actor)
   }
 
-  restore(id: string, hash: string, ifRevision: string): Promise<Page> {
+  async restore(id: string, hash: string, ifRevision: string): Promise<Page> {
     this.access.write()
     this.access.page(id)
-    return this.store.restoreVersion(id, hash, ifRevision, this.access.actor)
+    return publicPage(await this.store.restoreVersion(id, hash, ifRevision, this.access.actor))
   }
 
   async diff(id: string, from: string, to?: string): Promise<{ diff: string }> {

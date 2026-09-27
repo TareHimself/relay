@@ -15,7 +15,7 @@ import {
   type Thread,
   type ThreadStatus,
 } from '../core/threads'
-import type { Page, PageSummary, StoreEvent } from '../shared/pages'
+import type { StoredPage, StoredPageSummary, StoreEvent } from '../shared/pages'
 import { excerpt, newEvent } from './events'
 
 export interface PageThread extends Thread {
@@ -34,10 +34,10 @@ export interface ThreadHost {
     actor: string,
     events: StoreEvent[],
   ) => Promise<void>
-  pageRow: (id: string) => PageSummary
-  readPage: (id: string) => Promise<Page>
-  allPages: () => PageSummary[]
-  indexed: (page: PageSummary, threads: Thread[]) => void
+  pageRow: (id: string) => StoredPageSummary
+  readPage: (id: string) => Promise<StoredPage>
+  allPages: () => StoredPageSummary[]
+  indexed: (page: StoredPageSummary, threads: Thread[]) => void
 }
 
 interface ThreadFilter {
@@ -223,13 +223,13 @@ export class ThreadService {
     })
   }
 
-  private async load(page: PageSummary): Promise<{ raw: string | null; threads: Thread[] }> {
+  private async load(page: StoredPageSummary): Promise<{ raw: string | null; threads: Thread[] }> {
     const raw = await this.host.readFile(threadsPathFor(page.path))
     return { raw, threads: parseThreads(raw) }
   }
 
   private async save(
-    page: PageSummary,
+    page: StoredPageSummary,
     raw: string | null,
     threads: Thread[],
     actor: string,
@@ -250,7 +250,7 @@ export class ThreadService {
   private addressed(
     handles: readonly string[],
     actor: string,
-    page: PageSummary,
+    page: StoredPageSummary,
     threadId: string,
     body: string,
   ): StoreEvent[] {
@@ -263,7 +263,7 @@ export class ThreadService {
     )
   }
 
-  private pageOf(threadId: string): PageSummary {
+  private pageOf(threadId: string): StoredPageSummary {
     const row = this.host.orm
       .select()
       .from(schema.threads)
@@ -276,7 +276,7 @@ export class ThreadService {
   private update(
     threadId: string,
     actor: string,
-    change: (thread: Thread, page: PageSummary) => { thread: Thread; events: StoreEvent[] },
+    change: (thread: Thread, page: StoredPageSummary) => { thread: Thread; events: StoreEvent[] },
   ): Promise<Thread> {
     return this.host.serial(async () => {
       const page = this.pageOf(threadId)

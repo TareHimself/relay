@@ -213,7 +213,6 @@ describe('MCP endpoint', () => {
     })
     expect(Object.keys(created.data).sort()).toEqual([
       'id',
-      'path',
       'projectId',
       'revision',
       'tags',
