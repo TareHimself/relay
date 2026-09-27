@@ -155,5 +155,9 @@ export const globals = css`
     .relay-comment--draft {
       background: rgba(64, 192, 87, 0.35);
     }
+    .mantine-TagsInput-pill {
+      background: var(--mantine-color-default-hover);
+      border: 1px solid var(--mantine-color-default-border);
+    }
   }
 `
