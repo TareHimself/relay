@@ -11,6 +11,7 @@ services:
       ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
       ADMIN_NAME: ${ADMIN_NAME:-Admin}
       TRUST_PROXY: ${TRUST_PROXY:-}
+      PUBLIC_URL: ${PUBLIC_URL:-}
 
   tailscale:
     image: tailscale/tailscale:stable

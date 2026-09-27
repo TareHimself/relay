@@ -52,6 +52,7 @@ Without `TS_AUTHKEY`, the container falls back to an interactive login link in `
 | `ADMIN_HANDLE`   | `admin`     | Admin handle when first created                                                               |
 | `ADMIN_NAME`     | handle      | Admin display name when first created                                                         |
 | `TRUST_PROXY`    | unset       | `1` to trust `X-Forwarded-*` (client IP for login throttling, HTTPS detection for the cookie) |
+| `PUBLIC_URL`     | unset       | Makes the `url` field on pages absolute (see [Page API](#page-api)); no trailing slash        |
 | `BIND`           | `127.0.0.1` | Docker Compose only: host address the port is published on                                    |
 | `TS_AUTHKEY`     | -           | Docker Compose `tailscale` profile only: tailnet auth key (blank = login link in the logs)    |
 | `TS_HOSTNAME`    | `relay`     | Docker Compose `tailscale` profile only: MagicDNS name (`https://<name>.<tailnet>.ts.net`)    |
@@ -75,7 +76,7 @@ A page file is YAML frontmatter (`id`, `title`, `tags`) followed by the markdown
 - `edit_page` takes `edits` (`{ find, replace }` or `{ section, replace }`) **or** `body` (replace the whole body, keeping the id, history and threads). Pass `ifRevision` to refuse the change if the page moved.
 - `rename_page` changes a page's title; its file is renamed to match (history and comment threads move with it). `rename_project` changes a project's display name without moving anything.
 - `read_page` returns `body` and an `outline` of headings; `includeBody: false` returns metadata and outline only.
-- `create_page`, `edit_page`, `set_tags` and `rename_page` return metadata only (`id`, `path`, `url`, `revision`, `updatedAt`, `tags`) unless `includeBody` is set. `url` is the page's path in the web UI (`/projects/<id>/docs/<id>`), relative so it works under whatever host you're using.
+- `create_page`, `edit_page`, `set_tags` and `rename_page` return metadata only (`id`, `path`, `url`, `revision`, `updatedAt`, `tags`) unless `includeBody` is set. `url` is the page's path in the web UI (`/projects/<id>/docs/<id>`) — relative by default, so it's correct under any host Relay is reachable at; set `PUBLIC_URL` to get an absolute, clickable link instead (worth it once Relay has one settled address, e.g. behind Tailscale).
 
 ## Agents (MCP)
 

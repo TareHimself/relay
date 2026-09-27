@@ -145,7 +145,11 @@ export class RelayStore {
   private unpublished: StoreEvent[] = []
   private problems: IndexProblem[] = []
 
-  private constructor(dataDir: string, now: () => number) {
+  private constructor(
+    dataDir: string,
+    now: () => number,
+    private readonly publicUrl: string | undefined,
+  ) {
     this.now = now
     this.dataDir = resolve(dataDir)
     this.repoDir = join(this.dataDir, 'projects')
@@ -170,13 +174,20 @@ export class RelayStore {
     })
   }
 
-  static async open(dataDir: string, options: { now?: () => number } = {}): Promise<RelayStore> {
+  static async open(
+    dataDir: string,
+    options: { now?: () => number; publicUrl?: string | undefined } = {},
+  ): Promise<RelayStore> {
     const resolved = resolve(dataDir)
     await fs.mkdir(resolved, { recursive: true })
     await migrateLegacyLayout(resolved, join(resolved, 'projects'), join(resolved, 'db'))
     await fs.mkdir(join(resolved, 'projects'), { recursive: true })
     await fs.mkdir(join(resolved, 'db'), { recursive: true })
-    const store = new RelayStore(resolved, options.now ?? Date.now)
+    const store = new RelayStore(
+      resolved,
+      options.now ?? Date.now,
+      options.publicUrl?.replace(/\/$/, ''),
+    )
     await store.repo.run(['init', '-q'])
     try {
       await fs.writeFile(join(store.repoDir, '.gitignore'), 'blobs/\n', { flag: 'wx' })
@@ -526,7 +537,7 @@ export class RelayStore {
           projectId: project.id,
           title: meta.title,
           path,
-          url: docPath(project.id, meta.id),
+          url: this.urlFor(project.id, meta.id),
           revision: revisionOf(markdown),
           excerpt: excerptOf(markdown),
           updatedAt: (await fs.stat(this.pathFor(path))).mtime.toISOString(),
@@ -675,8 +686,12 @@ export class RelayStore {
     })
   }
 
+  private urlFor(projectId: string, pageId: string): string {
+    return (this.publicUrl ?? '') + docPath(projectId, pageId)
+  }
+
   private summaryOf(row: typeof schema.pages.$inferSelect): PageSummary {
-    return { ...row, url: docPath(row.projectId, row.id) }
+    return { ...row, url: this.urlFor(row.projectId, row.id) }
   }
 
   listPages(projectId: string): PageSummary[] {

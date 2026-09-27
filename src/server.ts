@@ -28,7 +28,7 @@ export async function bootstrapAdminFromEnv(store: RelayStore, env: AdminEnv): P
 }
 
 export async function startServer(env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  const store = await RelayStore.open(env.DATA_DIR ?? './data')
+  const store = await RelayStore.open(env.DATA_DIR ?? './data', { publicUrl: env.PUBLIC_URL })
   const created = await bootstrapAdminFromEnv(store, env)
   const admin = store.accounts.admin()
   if (!admin) {

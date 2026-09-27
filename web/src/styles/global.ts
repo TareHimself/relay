@@ -67,6 +67,9 @@ export const globals = css`
       max-width: none;
       margin: 0;
     }
+    .cm-editor-host .cm-editor .cm-line {
+      line-height: 1.65;
+    }
     .cm-editor-host .cm-fenced-code:not(.cm-fenced-code + .cm-fenced-code) {
       padding-top: calc(var(--relay-block-gap) + 0.7em);
       clip-path: inset(

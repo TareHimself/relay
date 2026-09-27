@@ -22,6 +22,26 @@ async function tempDirectory(): Promise<string> {
 }
 
 describe('RelayStore', () => {
+  it('gives pages a relative url by default, and an absolute one under publicUrl', async () => {
+    const directory = await tempDirectory()
+    const store = await RelayStore.open(directory)
+    const project = await store.createProject('Alpha', '', 'tare')
+    const page = await store.createPage(project.id, 'Plan', 'v0', 'tare')
+    expect(page.url).toBe(`/projects/${project.id}/docs/${page.id}`)
+    expect(store.listPages(project.id)[0]?.url).toBe(page.url)
+    store.close()
+
+    const withPublicUrl = await RelayStore.open(directory, {
+      publicUrl: 'https://relay.example.ts.net/',
+    })
+    try {
+      const fresh = await withPublicUrl.readPage(page.id)
+      expect(fresh.url).toBe(`https://relay.example.ts.net/projects/${project.id}/docs/${page.id}`)
+    } finally {
+      withPublicUrl.close()
+    }
+  })
+
   it('runs a comment thread from anchored question to resolution and rebuilds it from files', async () => {
     const directory = await tempDirectory()
     let store = await RelayStore.open(directory)
