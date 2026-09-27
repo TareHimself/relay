@@ -1,11 +1,11 @@
 import { css } from '@linaria/core'
 import { Box, Group, Menu, Skeleton, Text, UnstyledButton } from '@mantine/core'
-import { IconCheck, IconPlus, IconSelector } from '@tabler/icons-react'
+import { IconCheck, IconPencil, IconPlus, IconSelector } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import type { Project } from '@shared/pages'
 import { errorMessage } from '../../api/http'
-import { useCreateProject } from '../../api/queries'
+import { useCreateProject, useRenameProject } from '../../api/queries'
 import { projectPath } from '../../lib/paths'
 import { NameDialog } from '../common/NameDialog'
 
@@ -40,7 +40,9 @@ interface ProjectSwitcherProps {
 export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherProps) {
   const navigate = useNavigate()
   const create = useCreateProject()
+  const rename = useRenameProject()
   const [creating, setCreating] = useState(false)
+  const [renaming, setRenaming] = useState(false)
 
   function createProject(name: string) {
     create.mutate(
@@ -52,6 +54,11 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
         },
       },
     )
+  }
+
+  function renameProject(name: string) {
+    if (!current) return
+    rename.mutate({ id: current.id, name }, { onSuccess: () => setRenaming(false) })
   }
 
   return (
@@ -84,10 +91,15 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
               rightSection={project.id === current?.id ? <IconCheck size={14} /> : null}
               onClick={() => void navigate(projectPath(project.id))}
             >
-              {project.name}
+              <Text truncate>{project.name}</Text>
             </Menu.Item>
           ))}
           {projects.length > 0 && <Menu.Divider />}
+          {current && (
+            <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => setRenaming(true)}>
+              Rename project
+            </Menu.Item>
+          )}
           <Menu.Item leftSection={<IconPlus size={14} />} onClick={() => setCreating(true)}>
             New project
           </Menu.Item>
@@ -103,6 +115,20 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
         onClose={() => {
           setCreating(false)
           create.reset()
+        }}
+      />
+      <NameDialog
+        opened={renaming}
+        title="Rename project"
+        label="Project name"
+        submitLabel="Rename"
+        initialValue={current?.name}
+        busy={rename.isPending}
+        error={rename.error ? errorMessage(rename.error) : undefined}
+        onSubmit={renameProject}
+        onClose={() => {
+          setRenaming(false)
+          rename.reset()
         }}
       />
     </>

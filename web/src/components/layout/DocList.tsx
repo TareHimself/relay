@@ -122,7 +122,7 @@ export function DocList({ projectId, pages, loading, activeDocId, homeActive }: 
           {shown.map((page) => (
             <NavLink
               key={page.id}
-              label={page.title}
+              label={<Text truncate>{page.title}</Text>}
               leftSection={<IconFileText size={16} />}
               active={page.id === activeDocId}
               variant="light"

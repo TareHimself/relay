@@ -54,11 +54,12 @@ export function Sidebar({
         <Box flex={1} miw={0}>
           <ProjectSwitcher projects={projects} current={project} loading={loading} />
         </Box>
-        <Tooltip label="Collapse sidebar (Ctrl+\)" openDelay={300}>
+        <Tooltip label="Collapse sidebar (Ctrl+\)" openDelay={300} visibleFrom="sm">
           <ActionIcon
             variant="subtle"
             color="gray"
             aria-label="Collapse sidebar"
+            visibleFrom="sm"
             onClick={onCollapse}
           >
             <IconLayoutSidebarLeftCollapse size={18} />

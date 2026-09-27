@@ -8,11 +8,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { resolveAnchor } from '@shared/anchors'
 import type { Page } from '@shared/pages'
 import type { Thread } from '@shared/threads'
-import { ApiError } from '../../api/http'
+import { useQueryClient } from '@tanstack/react-query'
+import { ApiError, errorMessage } from '../../api/http'
 import {
+  keys,
   useCreateThread,
   useDeleteMessage,
   useEditMessage,
+  useRenamePage,
   useReopenThread,
   useReplyToThread,
   useResolveThread,
@@ -40,6 +43,7 @@ import { AnchoredStack, type AnchoredItem } from '../comments/AnchoredStack'
 import { DraftCard } from '../comments/DraftCard'
 import { PageComments } from '../comments/PageComments'
 import { ThreadCard } from '../comments/ThreadCard'
+import { NameDialog } from '../common/NameDialog'
 import { ConflictBanner } from './ConflictBanner'
 import { DeleteDocDialog } from './DeleteDocDialog'
 import { DocActions, DocTitle } from './DocHeader'
@@ -103,9 +107,12 @@ export function DocView({ page, projectName }: DocViewProps) {
     useUiStore.getState().setActiveThread(threadId),
   )
   useOutline(view, tick)
+  const queryClient = useQueryClient()
   const frame = useRef<HTMLDivElement>(null)
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const renamePage = useRenamePage(page)
   const [params, setParams] = useSearchParams()
   const targetThread = params.get('thread')
   const gutterRoom = useGutterRoom(frame, GUTTER_WIDTH + GUTTER_GAP + 8)
@@ -214,6 +221,18 @@ export function DocView({ page, projectName }: DocViewProps) {
   async function submitPageComment(body: string) {
     await createThread.mutateAsync({ body })
     completeDraft(null)
+  }
+
+  async function submitRename(title: string) {
+    await sync.ensureSaved()
+    const latest = queryClient.getQueryData<Page>(keys.page(page.id)) ?? page
+    try {
+      await renamePage.mutateAsync({ title, ifRevision: latest.revision })
+      setRenameOpen(false)
+      renamePage.reset()
+    } catch {
+      return
+    }
   }
 
   const card = (thread: Thread) => (
@@ -329,10 +348,25 @@ export function DocView({ page, projectName }: DocViewProps) {
         onClose={() => setVersionsOpen(false)}
         beforeRestore={sync.ensureSaved}
       />
+      <NameDialog
+        opened={renameOpen}
+        title="Rename doc"
+        label="Title"
+        submitLabel="Rename"
+        initialValue={page.title}
+        busy={renamePage.isPending}
+        error={renamePage.error ? errorMessage(renamePage.error) : undefined}
+        onSubmit={(title) => void submitRename(title)}
+        onClose={() => {
+          setRenameOpen(false)
+          renamePage.reset()
+        }}
+      />
       <DocActions
         pageWidth={pageWidth}
         onToggleWidth={togglePageWidth}
         onOpenVersions={() => setVersionsOpen(true)}
+        onRename={() => setRenameOpen(true)}
         onDelete={() => setDeleteOpen(true)}
         status={sync.status}
         resolvedCount={resolvedCount}

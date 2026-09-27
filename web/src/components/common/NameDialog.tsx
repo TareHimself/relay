@@ -1,11 +1,13 @@
 import { Button, Group, Modal, TextInput } from '@mantine/core'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { NO_WRITING_ASSISTANT } from '../../editor/writingAssistants'
 
 interface NameDialogProps {
   opened: boolean
   title: string
   label: string
+  initialValue?: string | undefined
+  submitLabel?: string | undefined
   busy: boolean
   error: string | undefined
   onSubmit: (name: string) => void
@@ -13,13 +15,23 @@ interface NameDialogProps {
 }
 
 function NameForm({
+  opened,
   label,
+  initialValue,
+  submitLabel,
   busy,
   error,
   onSubmit,
   onClose,
-}: Pick<NameDialogProps, 'label' | 'busy' | 'error' | 'onSubmit' | 'onClose'>) {
-  const [value, setValue] = useState('')
+}: Pick<
+  NameDialogProps,
+  'opened' | 'label' | 'initialValue' | 'submitLabel' | 'busy' | 'error' | 'onSubmit' | 'onClose'
+>) {
+  const [value, setValue] = useState(initialValue ?? '')
+
+  useEffect(() => {
+    if (opened) setValue(initialValue ?? '')
+  }, [opened, initialValue])
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -42,7 +54,7 @@ function NameForm({
           Cancel
         </Button>
         <Button type="submit" loading={busy} disabled={!value.trim()}>
-          Create
+          {submitLabel ?? 'Create'}
         </Button>
       </Group>
     </form>
@@ -52,7 +64,7 @@ function NameForm({
 export function NameDialog({ opened, title, onClose, ...form }: NameDialogProps) {
   return (
     <Modal opened={opened} onClose={onClose} title={title} size="sm" centered>
-      <NameForm {...form} onClose={onClose} />
+      <NameForm {...form} opened={opened} onClose={onClose} />
     </Modal>
   )
 }

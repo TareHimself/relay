@@ -70,6 +70,15 @@ export function useCreateProject() {
   })
 }
 
+export function useRenameProject() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; name: string }) =>
+      http.patch(`/projects/${input.id}`, projectSchema, { name: input.name }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.projects }),
+  })
+}
+
 export function useCreatePage(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -136,6 +145,19 @@ export function useSetTags(page: { id: string; projectId: string }) {
 export function useSavePage(pageId: string) {
   return useMutation({
     mutationFn: (input: SaveInput) => http.put(`/pages/${pageId}`, pageSchema, input),
+  })
+}
+
+export function useRenamePage(page: { id: string; projectId: string }) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { title: string; ifRevision?: string }) =>
+      http.patch(`/pages/${page.id}/title`, pageSchema, input),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(keys.page(page.id), saved)
+      void queryClient.invalidateQueries({ queryKey: keys.projectPages(page.projectId) })
+      void queryClient.invalidateQueries({ queryKey: ['search'] })
+    },
   })
 }
 

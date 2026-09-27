@@ -8,7 +8,13 @@ import {
   Title,
   Tooltip,
 } from '@mantine/core'
-import { IconArrowsHorizontal, IconDots, IconHistory, IconTrash } from '@tabler/icons-react'
+import {
+  IconArrowsHorizontal,
+  IconDots,
+  IconHistory,
+  IconPencil,
+  IconTrash,
+} from '@tabler/icons-react'
 import type { SaveStatus } from '../../editor/useDocSync'
 import type { PageWidth } from '../../stores/prefsStore'
 import type { ThreadFilter } from '../../stores/uiStore'
@@ -46,6 +52,7 @@ interface DocActionsProps {
   pageWidth: PageWidth
   onToggleWidth: () => void
   onOpenVersions: () => void
+  onRename: () => void
   onDelete: () => void
 }
 
@@ -99,6 +106,9 @@ export function DocActions(props: DocActionsProps) {
           </ActionIcon>
         </Menu.Target>
         <Menu.Dropdown>
+          <Menu.Item leftSection={<IconPencil size={14} />} onClick={props.onRename}>
+            Rename doc
+          </Menu.Item>
           <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={props.onDelete}>
             Delete doc
           </Menu.Item>
