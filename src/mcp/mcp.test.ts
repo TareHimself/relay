@@ -26,6 +26,7 @@ const EXPECTED_TOOLS = [
   'resolve',
   'restore_version',
   'search',
+  'set_project_description',
   'set_tags',
   'whoami',
 ]
@@ -323,6 +324,12 @@ describe('MCP endpoint', () => {
 
     const renamedProject = await agent.call('rename_project', { id: project.id, name: 'Renamed' })
     expect(renamedProject.data).toMatchObject({ id: project.id, name: 'Renamed' })
+
+    const described = await agent.call('set_project_description', {
+      id: project.id,
+      description: 'A scratch project',
+    })
+    expect(described.data).toMatchObject({ id: project.id, description: 'A scratch project' })
 
     const renamedPage = await agent.call('rename_page', { id: page.id, title: 'New Title' })
     expect(renamedPage.data).toMatchObject({ id: page.id, title: 'New Title' })

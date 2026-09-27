@@ -99,6 +99,12 @@ export class Workspace {
     return this.store.renameProject(id, name, this.access.actor)
   }
 
+  setProjectDescription(id: string, description: string): Promise<Project> {
+    this.access.write()
+    this.access.project(id)
+    return this.store.setProjectDescription(id, description, this.access.actor)
+  }
+
   listPages(projectId: string): PageSummary[] {
     this.access.project(projectId)
     return this.store.listPages(projectId)

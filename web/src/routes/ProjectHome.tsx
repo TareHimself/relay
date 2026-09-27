@@ -1,8 +1,9 @@
-import { SimpleGrid, Stack, Text, Title } from '@mantine/core'
+import { SimpleGrid, Stack, Title } from '@mantine/core'
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { useProjectPages, useProjects } from '../api/queries'
 import { DocCard, NewDocCard } from '../components/home/DocCard'
+import { ProjectDescription } from '../components/home/ProjectDescription'
 import { NewDocDialog } from '../components/layout/NewDocDialog'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 
@@ -22,7 +23,7 @@ export function ProjectHome() {
     <Stack gap="lg" maw={1152} mx="auto" pt="md">
       <Stack gap={4}>
         <Title order={1}>{project.name}</Title>
-        {project.description && <Text c="dimmed">{project.description}</Text>}
+        <ProjectDescription project={project} />
       </Stack>
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing="md">
         {recent.map((page) => (

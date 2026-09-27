@@ -7,6 +7,7 @@ import {
   editInput,
   eventsQuery,
   pageInput,
+  projectDescriptionInput,
   projectInput,
   renamePageInput,
   renameProjectInput,
@@ -194,6 +195,10 @@ export function createApp(store: RelayStore) {
   api.patch('/projects/:projectId', async (c) => {
     const { name } = renameProjectInput.parse(await c.req.json())
     return c.json(await workspace(c).renameProject(c.req.param('projectId'), name))
+  })
+  api.put('/projects/:projectId/description', async (c) => {
+    const { description } = projectDescriptionInput.parse(await c.req.json())
+    return c.json(await workspace(c).setProjectDescription(c.req.param('projectId'), description))
   })
   api.get('/projects/:projectId/pages', (c) =>
     c.json(workspace(c).listPages(c.req.param('projectId'))),

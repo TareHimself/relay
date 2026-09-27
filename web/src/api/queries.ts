@@ -6,7 +6,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query'
 import { z } from 'zod'
-import { pageSchema, pageSummarySchema, projectSchema } from '@shared/pages'
+import { pageSchema, pageSummarySchema, projectSchema, type Project } from '@shared/pages'
 import type { PageInput, ProjectInput, ReplyInput, SaveInput, ThreadInput } from '@shared/requests'
 import { searchHitSchema } from '@shared/search'
 import { threadSchema, type Thread } from '@shared/threads'
@@ -80,12 +80,29 @@ export function useCreateProject() {
   })
 }
 
+function patchProjectCache(queryClient: QueryClient, project: Project) {
+  queryClient.setQueryData<Project[]>(keys.projects, (current) =>
+    current?.map((p) => (p.id === project.id ? project : p)),
+  )
+}
+
 export function useRenameProject() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: { id: string; name: string }) =>
       http.patch(`/projects/${input.id}`, projectSchema, { name: input.name }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.projects }),
+    onSuccess: (project) => patchProjectCache(queryClient, project),
+  })
+}
+
+export function useSetProjectDescription() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; description: string }) =>
+      http.put(`/projects/${input.id}/description`, projectSchema, {
+        description: input.description,
+      }),
+    onSuccess: (project) => patchProjectCache(queryClient, project),
   })
 }
 

@@ -7,6 +7,7 @@ export const projectInput = z.object({
   description: z.string().default(''),
 })
 export const renameProjectInput = z.object({ name: z.string().trim().min(1) })
+export const projectDescriptionInput = z.object({ description: z.string() })
 export const renamePageInput = z.object({
   title: z.string().trim().min(1),
   ifRevision: z.string().optional(),

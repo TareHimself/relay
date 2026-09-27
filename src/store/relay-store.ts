@@ -660,30 +660,55 @@ export class RelayStore {
     })
   }
 
-  renameProject(id: string, name: string, actor: string): Promise<Project> {
+  private updateProject(
+    id: string,
+    changes: { name?: string; description?: string },
+    actor: string,
+  ): Promise<Project> {
     return this.serial(async () => {
-      const trimmed = name.trim()
-      if (!trimmed) throw new StoreError('invalid', 'Name cannot be empty')
+      const name = changes.name?.trim()
+      if (changes.name !== undefined && !name)
+        throw new StoreError('invalid', 'Name cannot be empty')
       const row = this.orm.select().from(schema.projects).where(eq(schema.projects.id, id)).get()
       if (!row) throw new StoreError('not_found', 'Project not found')
-      if (trimmed === row.name) return { id: row.id, name: row.name, description: row.description }
+      const nextName = name ?? row.name
+      const nextDescription = changes.description ?? row.description
+      if (nextName === row.name && nextDescription === row.description) {
+        return { id: row.id, name: row.name, description: row.description }
+      }
       const path = `${row.path}/project.yaml`
       const raw = await this.readOptional(this.pathFor(path))
       if (raw === null) throw new StoreError('not_found', 'Project not found')
       const document = YAML.parseDocument(raw)
-      document.set('name', trimmed)
+      document.set('name', nextName)
+      document.set('description', nextDescription)
       const next = `${document.toString().trimEnd()}\n`
-      const project = { id: row.id, name: trimmed, description: row.description }
-      const event = newEvent('project.updated', actor, id, { summary: `Renamed to "${trimmed}"` })
+      const project = { id: row.id, name: nextName, description: nextDescription }
+      const renamed = nextName !== row.name
+      const redescribed = nextDescription !== row.description
+      const summary = renamed
+        ? redescribed
+          ? `Renamed to "${nextName}" and changed the description`
+          : `Renamed to "${nextName}"`
+        : 'Changed the description'
+      const event = newEvent('project.updated', actor, id, { summary })
       await this.commitFile(path, raw, next, actor, [event])
       this.orm
         .update(schema.projects)
-        .set({ name: trimmed })
+        .set({ name: nextName, description: nextDescription })
         .where(eq(schema.projects.id, id))
         .run()
       this.search.setProject(project)
       return project
     })
+  }
+
+  renameProject(id: string, name: string, actor: string): Promise<Project> {
+    return this.updateProject(id, { name }, actor)
+  }
+
+  setProjectDescription(id: string, description: string, actor: string): Promise<Project> {
+    return this.updateProject(id, { description }, actor)
   }
 
   private urlFor(pageId: string): string {

@@ -185,3 +185,34 @@ describe('renameProject', () => {
     })
   })
 })
+
+describe('setProjectDescription', () => {
+  it('changes the description without touching the name or any files', async () => {
+    const { store, project, page } = await setup()
+    const updated = await store.setProjectDescription(project.id, 'A scratch project', 'tare')
+    expect(updated).toEqual({ id: project.id, name: 'Alpha', description: 'A scratch project' })
+    expect(store.listProjects()).toContainEqual(updated)
+    expect((await store.readPage(page.id)).path).toBe(page.path)
+  })
+
+  it('accepts clearing the description back to empty', async () => {
+    const { store, project } = await setup()
+    await store.setProjectDescription(project.id, 'Something', 'tare')
+    const cleared = await store.setProjectDescription(project.id, '', 'tare')
+    expect(cleared.description).toBe('')
+  })
+
+  it('is a no-op when the description is unchanged', async () => {
+    const { store, project } = await setup()
+    const before = await git(store, 'rev-parse', 'HEAD')
+    await store.setProjectDescription(project.id, '', 'tare')
+    expect(await git(store, 'rev-parse', 'HEAD')).toBe(before)
+  })
+
+  it('rejects an unknown project', async () => {
+    const { store } = await setup()
+    await expect(store.setProjectDescription('nope', 'X', 'tare')).rejects.toMatchObject({
+      code: 'not_found',
+    })
+  })
+})

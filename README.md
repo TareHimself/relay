@@ -74,13 +74,13 @@ A page file is YAML frontmatter (`id`, `title`, `tags`) followed by the markdown
 
 - Writes accept only the markdown body. A body that starts with Relay frontmatter (`id`, `title` or `tags` keys) is rejected.
 - `edit_page` takes `edits` (`{ find, replace }` or `{ section, replace }`) **or** `body` (replace the whole body, keeping the id, history and threads). Pass `ifRevision` to refuse the change if the page moved.
-- `rename_page` changes a page's title; its file is renamed to match (history and comment threads move with it). `rename_project` changes a project's display name without moving anything.
+- `rename_page` changes a page's title; its file is renamed to match (history and comment threads move with it). `rename_project` changes a project's display name without moving anything; `set_project_description` changes its description.
 - `read_page` returns `body` and an `outline` of headings; `includeBody: false` returns metadata and outline only.
 - `create_page`, `edit_page`, `set_tags` and `rename_page` return metadata only (`id`, `path`, `url`, `revision`, `updatedAt`, `tags`) unless `includeBody` is set. `url` is a short link (`/doc/<id>`, page ids are unique on their own) that the web app resolves and forwards to the page's real location — relative by default, so it's correct under any host Relay is reachable at; set `PUBLIC_URL` to get an absolute, clickable link instead (worth it once Relay has one settled address, e.g. behind Tailscale).
 
 ## Agents (MCP)
 
-Create an API token in the UI (Settings), then point an MCP client at `http://<host>:<port>/mcp` with the header `Authorization: Bearer rly_...`. Tokens are read or write scoped and can be limited to one project. Tools: `whoami`, `list_projects`, `create_project`, `rename_project`, `list_pages`, `read_page`, `create_page`, `edit_page`, `rename_page`, `set_tags`, `list_tags`, `search`, `history`, `diff`, `read_version`, `restore_version`, `delete_page`, `read_threads`, `open_threads`, `comment`, `reply`, `resolve`, `poll_events`.
+Create an API token in the UI (Settings), then point an MCP client at `http://<host>:<port>/mcp` with the header `Authorization: Bearer rly_...`. Tokens are read or write scoped and can be limited to one project. Tools: `whoami`, `list_projects`, `create_project`, `rename_project`, `set_project_description`, `list_pages`, `read_page`, `create_page`, `edit_page`, `rename_page`, `set_tags`, `list_tags`, `search`, `history`, `diff`, `read_version`, `restore_version`, `delete_page`, `read_threads`, `open_threads`, `comment`, `reply`, `resolve`, `poll_events`.
 
 The same operations are available over REST under `/api` (Bearer token or session cookie).
 

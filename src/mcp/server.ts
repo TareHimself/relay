@@ -5,6 +5,7 @@ import { StoreError } from '../core/errors'
 import type { Page } from '../shared/pages'
 import {
   editInput,
+  projectDescriptionInput,
   projectInput,
   renamePageInput,
   renameProjectInput,
@@ -77,6 +78,16 @@ export function createMcpServer(workspace: Workspace): McpServer {
       inputSchema: { id: z.string(), ...renameProjectInput.shape },
     },
     ({ id, name }) => respond(() => workspace.renameProject(id, name)),
+  )
+
+  server.registerTool(
+    'set_project_description',
+    {
+      title: 'Set project description',
+      description: "Change a project's description.",
+      inputSchema: { id: z.string(), ...projectDescriptionInput.shape },
+    },
+    ({ id, description }) => respond(() => workspace.setProjectDescription(id, description)),
   )
 
   server.registerTool(

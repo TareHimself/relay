@@ -136,6 +136,25 @@ describe('rename routes', () => {
     expect((await admin.send('PATCH', `/api/projects/${alpha.id}`, { name: ' ' })).status).toBe(400)
   })
 
+  it('sets a project description, for a write token but not a read-only one', async () => {
+    const { store, admin, alpha, mint } = await setup()
+    const reader = client(store, await mint({ name: 'reader', scope: 'read' }))
+    expect(
+      (await reader.send('PUT', `/api/projects/${alpha.id}/description`, { description: 'Nope' }))
+        .status,
+    ).toBe(403)
+    const updated = await json(
+      await admin.send('PUT', `/api/projects/${alpha.id}/description`, {
+        description: 'A scratch project',
+      }),
+    )
+    expect(updated).toMatchObject({ id: alpha.id, description: 'A scratch project' })
+    const cleared = await json(
+      await admin.send('PUT', `/api/projects/${alpha.id}/description`, { description: '' }),
+    )
+    expect(cleared.description).toBe('')
+  })
+
   it('confines project rename to a project-restricted token', async () => {
     const { store, alpha, beta, mint } = await setup()
     const scoped = client(store, await mint({ name: 'alphaonly', projectId: alpha.id }))
