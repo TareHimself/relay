@@ -1,22 +1,16 @@
 import YAML from 'yaml'
 import { splitFrontmatter } from '../shared/frontmatter'
-import { PAGE_STATUSES, type PageStatus } from '../shared/pages'
 import { StoreError } from './errors'
 import { tagsOf } from './tags'
 
 const HEAD = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/
-const RESERVED_KEYS = ['id', 'title', 'status', 'tags']
+const RESERVED_KEYS = ['id', 'title', 'tags']
 
 export interface PageFile {
   id: string
   title: string
-  status: PageStatus
   tags: string[]
   body: string
-}
-
-function statusOf(value: unknown): PageStatus {
-  return PAGE_STATUSES.find((status) => status === value) ?? 'draft'
 }
 
 function mappingOf(source: string): Record<string, unknown> | null {
@@ -39,7 +33,6 @@ export function parsePageFile(markdown: string): PageFile {
   return {
     id: parsed.id,
     title: parsed.title,
-    status: statusOf(parsed.status),
     tags: tagsOf(parsed.tags),
     body: splitFrontmatter(markdown).body,
   }
@@ -47,12 +40,12 @@ export function parsePageFile(markdown: string): PageFile {
 
 export function withFrontmatter(
   markdown: string,
-  changes: { status?: PageStatus; tags?: readonly string[] },
+  changes: { title?: string; tags?: readonly string[] },
 ): string {
   const match = HEAD.exec(markdown)
   if (!match) return markdown
   const document = YAML.parseDocument(match[1] ?? '')
-  if (changes.status !== undefined) document.set('status', changes.status)
+  if (changes.title !== undefined) document.set('title', changes.title)
   if (changes.tags !== undefined) document.set('tags', [...changes.tags])
   return `---\n${document.toString().trimEnd()}\n---\n${markdown.slice(match[0].length)}`
 }
@@ -71,8 +64,8 @@ export function assertNoFrontmatter(next: string, previous = ''): void {
   if (startsWithFrontmatter(next) && !startsWithFrontmatter(previous)) {
     throw new StoreError(
       'invalid',
-      'The body must not start with YAML frontmatter. Relay keeps id, title, status and tags itself: ' +
-        'pass status and tags as parameters and send only the markdown body.',
+      'The body must not start with YAML frontmatter. Relay keeps id, title and tags itself: ' +
+        'pass tags as a parameter and send only the markdown body.',
     )
   }
 }

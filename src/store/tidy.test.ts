@@ -84,7 +84,7 @@ describe('planTidy', () => {
   })
 })
 
-const dirOf = (store: RelayStore) => (store as unknown as { dataDir: string }).dataDir
+const dirOf = (store: RelayStore) => (store as unknown as { repoDir: string }).repoDir
 const git = async (store: RelayStore, ...args: string[]) =>
   (await exec('git', ['-C', dirOf(store), ...args])).stdout.trim()
 

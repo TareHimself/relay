@@ -26,35 +26,60 @@ docker compose up -d --build
 
 The port is published on `127.0.0.1` only. Put a TLS-terminating reverse proxy in front for anything beyond your own machine, and set `TRUST_PROXY=1` when it sets `X-Forwarded-For` / `X-Forwarded-Proto`. Set `BIND=0.0.0.0` only if you understand the exposure.
 
+Everything lives under one host folder, `./data`: Relay's own data is at `./data/relay` (`DATA_DIR` inside the container), and the optional Tailscale sidecar below keeps its state at `./data/tailscale`, so a single folder covers the whole stack for backup or migration.
+
+#### Tailscale instead of a public port
+
+An optional `tailscale` service proxies Relay over your tailnet instead of publishing a port at all. Generate a device auth key at [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys) — **"Generate auth key"**, not an OAuth client secret or other API key, or the container will reject it as invalid — and set it as `TS_AUTHKEY` in `.env`, along with `TRUST_PROXY=1`:
+
+```sh
+# in .env: TS_AUTHKEY=tskey-auth-..., TS_HOSTNAME=relay (default), TRUST_PROXY=1
+docker compose --profile tailscale up -d --build
+```
+
+Relay becomes reachable at `https://relay.<your-tailnet>.ts.net` (or your `TS_HOSTNAME`) with TLS handled by Tailscale. `TRUST_PROXY=1` is required so Relay sees the real client IP and HTTPS from the `X-Forwarded-*` headers Tailscale's proxy sets.
+
+Without `TS_AUTHKEY`, the container falls back to an interactive login link in `docker compose logs tailscale` — but `tailscale up` there times out and restarts (generating a new link, and a new pending-node entry in your tailnet) roughly every 60–90 seconds, so it's easy to miss. The auth key avoids that entirely and is the recommended path.
+
 ## Configuration
 
 | Variable         | Default     | Purpose                                                                                       |
 | ---------------- | ----------- | --------------------------------------------------------------------------------------------- |
-| `DATA_DIR`       | `./data`    | Where pages, threads and `state.db` live                                                      |
+| `DATA_DIR`       | `./data`    | Parent of `projects/` (git repo) and `db/` (`state.db`) — see [Data](#data)                   |
 | `PORT`           | `47821`     | Listen port                                                                                   |
 | `HOST`           | `127.0.0.1` | Listen address (the Docker image uses `0.0.0.0` inside)                                       |
 | `ADMIN_PASSWORD` | -           | Creates the admin on first start                                                              |
 | `ADMIN_HANDLE`   | `admin`     | Admin handle when first created                                                               |
 | `ADMIN_NAME`     | handle      | Admin display name when first created                                                         |
 | `TRUST_PROXY`    | unset       | `1` to trust `X-Forwarded-*` (client IP for login throttling, HTTPS detection for the cookie) |
+| `BIND`           | `127.0.0.1` | Docker Compose only: host address the port is published on                                    |
+| `TS_AUTHKEY`     | -           | Docker Compose `tailscale` profile only: tailnet auth key (blank = login link in the logs)    |
+| `TS_HOSTNAME`    | `relay`     | Docker Compose `tailscale` profile only: MagicDNS name (`https://<name>.<tailnet>.ts.net`)    |
 
 ## Data
 
-`DATA_DIR` is a git repository: `<project>/project.yaml`, `<project>/<slug>.md` for pages, and `<slug>.threads.json` for comments. `state.db` (SQLite, not in git) holds the admin account, sessions, API tokens and the event log, so **back up the whole folder**.
+`DATA_DIR` holds two sibling folders, both under the one bind-mounted directory:
 
-A page file is YAML frontmatter (`id`, `title`, `status`, `tags`) followed by the markdown body. The API and MCP tools never expose the frontmatter: pages come back as structured fields plus a plain markdown `body`.
+- `projects/` — the git repository: `<project>/project.yaml`, `<project>/<slug>.md` for pages, `<slug>.threads.json` for comments.
+- `db/` — `state.db` (SQLite, not in git): the admin account, sessions, API tokens and the event log.
+
+Keeping `db/` outside the git repo means it can never end up in a commit, by construction, rather than by relying on a `.gitignore` entry. **Back up the whole `DATA_DIR` folder** (both subfolders).
+
+An install from before this split (a flat `DATA_DIR` with the git repo and `state.db` as direct siblings) is migrated automatically and non-destructively the first time it starts under the new layout: everything moves into `projects/` except `state.db*`, which moves into `db/`.
+
+A page file is YAML frontmatter (`id`, `title`, `tags`) followed by the markdown body. The API and MCP tools never expose the frontmatter: pages come back as structured fields plus a plain markdown `body`.
 
 ## Page API
 
-- `status` is `draft` (default) or `published`. It is a label: it shows in listings and can filter `list_pages`, but does not change who can read or edit a page.
-- Writes accept only the markdown body. A body that starts with Relay frontmatter (`id`, `title`, `status` or `tags` keys) is rejected.
-- `edit_page` takes `edits` (`{ find, replace }` or `{ section, replace }`) **or** `body` (replace the whole body, keeping the id, history and threads), optionally with `status`. Pass `ifRevision` to refuse the change if the page moved.
+- Writes accept only the markdown body. A body that starts with Relay frontmatter (`id`, `title` or `tags` keys) is rejected.
+- `edit_page` takes `edits` (`{ find, replace }` or `{ section, replace }`) **or** `body` (replace the whole body, keeping the id, history and threads). Pass `ifRevision` to refuse the change if the page moved.
+- `rename_page` changes a page's title; its file is renamed to match (history and comment threads move with it). `rename_project` changes a project's display name without moving anything.
 - `read_page` returns `body` and an `outline` of headings; `includeBody: false` returns metadata and outline only.
-- `create_page`, `edit_page` and `set_tags` return metadata only (`id`, `path`, `revision`, `updatedAt`, `tags`, `status`) unless `includeBody` is set.
+- `create_page`, `edit_page`, `set_tags` and `rename_page` return metadata only (`id`, `path`, `url`, `revision`, `updatedAt`, `tags`) unless `includeBody` is set. `url` is the page's path in the web UI (`/projects/<id>/docs/<id>`), relative so it works under whatever host you're using.
 
 ## Agents (MCP)
 
-Create an API token in the UI (Settings), then point an MCP client at `http://<host>:<port>/mcp` with the header `Authorization: Bearer rly_...`. Tokens are read or write scoped and can be limited to one project. Tools: `whoami`, `list_projects`, `create_project`, `list_pages`, `read_page`, `create_page`, `edit_page`, `set_tags`, `list_tags`, `search`, `history`, `diff`, `read_version`, `restore_version`, `delete_page`, `read_threads`, `open_threads`, `comment`, `reply`, `resolve`, `poll_events`.
+Create an API token in the UI (Settings), then point an MCP client at `http://<host>:<port>/mcp` with the header `Authorization: Bearer rly_...`. Tokens are read or write scoped and can be limited to one project. Tools: `whoami`, `list_projects`, `create_project`, `rename_project`, `list_pages`, `read_page`, `create_page`, `edit_page`, `rename_page`, `set_tags`, `list_tags`, `search`, `history`, `diff`, `read_version`, `restore_version`, `delete_page`, `read_threads`, `open_threads`, `comment`, `reply`, `resolve`, `poll_events`.
 
 The same operations are available over REST under `/api` (Bearer token or session cookie).
 

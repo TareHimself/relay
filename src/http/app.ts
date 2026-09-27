@@ -8,13 +8,14 @@ import {
   eventsQuery,
   pageInput,
   projectInput,
+  renamePageInput,
+  renameProjectInput,
   replyInput,
   restoreInput,
   saveInput,
   threadFilter,
   threadInput,
 } from '../shared/requests'
-import { pageStatusSchema } from '../shared/pages'
 import { searchQuery } from '../shared/search'
 import { tagsInput } from '../shared/tags'
 import { tokenInput } from '../shared/tokens'
@@ -190,24 +191,17 @@ export function createApp(store: RelayStore) {
     const input = projectInput.parse(await c.req.json())
     return c.json(await workspace(c).createProject(input.name, input.description), 201)
   })
+  api.patch('/projects/:projectId', async (c) => {
+    const { name } = renameProjectInput.parse(await c.req.json())
+    return c.json(await workspace(c).renameProject(c.req.param('projectId'), name))
+  })
   api.get('/projects/:projectId/pages', (c) =>
-    c.json(
-      workspace(c).listPages(
-        c.req.param('projectId'),
-        pageStatusSchema.optional().parse(c.req.query('status')),
-      ),
-    ),
+    c.json(workspace(c).listPages(c.req.param('projectId'))),
   )
   api.post('/projects/:projectId/pages', async (c) => {
     const input = pageInput.parse(await c.req.json())
     return c.json(
-      await workspace(c).createPage(
-        c.req.param('projectId'),
-        input.title,
-        input.body,
-        input.tags,
-        input.status,
-      ),
+      await workspace(c).createPage(c.req.param('projectId'), input.title, input.body, input.tags),
       201,
     )
   })
@@ -234,6 +228,10 @@ export function createApp(store: RelayStore) {
     return c.json(
       await workspace(c).replacePage(c.req.param('pageId'), input.body, input.ifRevision),
     )
+  })
+  api.patch('/pages/:pageId/title', async (c) => {
+    const { title, ifRevision } = renamePageInput.parse(await c.req.json())
+    return c.json(await workspace(c).renamePage(c.req.param('pageId'), title, ifRevision))
   })
   api.get('/pages/:pageId/history', async (c) =>
     c.json(await workspace(c).history(c.req.param('pageId'))),

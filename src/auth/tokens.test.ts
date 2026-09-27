@@ -26,9 +26,12 @@ describe('TokenService', () => {
   it('never keeps the secret in the database file', async () => {
     const store = await tempStore()
     const created = store.tokens.create({ name: 'agent' })
-    const db = new Database(join((store as unknown as { dataDir: string }).dataDir, 'state.db'), {
-      readonly: true,
-    })
+    const db = new Database(
+      join((store as unknown as { dataDir: string }).dataDir, 'db', 'state.db'),
+      {
+        readonly: true,
+      },
+    )
     const rows = db.prepare('SELECT * FROM tokens').all()
     db.close()
     expect(JSON.stringify(rows)).not.toContain(created.token)

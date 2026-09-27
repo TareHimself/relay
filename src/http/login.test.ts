@@ -235,8 +235,8 @@ describe('handles and display names', () => {
     ])
     expect(after.every((entry: { handle: string }) => entry.handle === 'tare')).toBe(true)
 
-    const dataDir = (store as unknown as { dataDir: string }).dataDir
-    const raw = await exec('git', ['-C', dataDir, 'log', '--format=%an|%ae', '--no-mailmap'])
+    const repoDir = (store as unknown as { repoDir: string }).repoDir
+    const raw = await exec('git', ['-C', repoDir, 'log', '--format=%an|%ae', '--no-mailmap'])
     expect(raw.stdout.trim().split('\n')).toEqual([
       'Tare Belo|tare@relay.local',
       'Tare B|tare@relay.local',

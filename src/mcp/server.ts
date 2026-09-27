@@ -2,8 +2,14 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import { StoreError } from '../core/errors'
-import { pageStatusSchema, type Page } from '../shared/pages'
-import { editInput, projectInput, threadInput } from '../shared/requests'
+import type { Page } from '../shared/pages'
+import {
+  editInput,
+  projectInput,
+  renamePageInput,
+  renameProjectInput,
+  threadInput,
+} from '../shared/requests'
 import { threadStatusSchema } from '../shared/threads'
 import { MARK_END, MARK_START } from '../store/search'
 import { pageMetadata, type Workspace } from '../workspace'
@@ -24,10 +30,6 @@ async function respond(work: () => unknown): Promise<CallToolResult> {
     throw error
   }
 }
-
-const STATUS_HELP =
-  "status is 'draft' (the default) or 'published'. It is a label shown in list_pages and used to " +
-  'filter it; it does not change who can read or edit the page.'
 
 const includeBodyFlag = z
   .boolean()
@@ -68,16 +70,23 @@ export function createMcpServer(workspace: Workspace): McpServer {
   )
 
   server.registerTool(
+    'rename_project',
+    {
+      title: 'Rename project',
+      description: "Change a project's display name. Its internal path is unaffected.",
+      inputSchema: { id: z.string(), ...renameProjectInput.shape },
+    },
+    ({ id, name }) => respond(() => workspace.renameProject(id, name)),
+  )
+
+  server.registerTool(
     'list_pages',
     {
       title: 'List pages',
-      description:
-        'List the pages in a project (id, title, path, revision, status, tags, preview). ' +
-        'Pass status to list only draft or published pages. ' +
-        STATUS_HELP,
-      inputSchema: { projectId: z.string(), status: pageStatusSchema.optional() },
+      description: 'List the pages in a project (id, title, path, url, revision, tags, preview).',
+      inputSchema: { projectId: z.string() },
     },
-    ({ projectId, status }) => respond(() => workspace.listPages(projectId, status)),
+    ({ projectId }) => respond(() => workspace.listPages(projectId)),
   )
 
   server.registerTool(
@@ -85,7 +94,7 @@ export function createMcpServer(workspace: Workspace): McpServer {
     {
       title: 'Read page',
       description:
-        'Read a page: metadata (title, status, tags, revision), body (plain markdown, no ' +
+        'Read a page: metadata (title, tags, revision, url), body (plain markdown, no ' +
         'frontmatter) and outline (each heading as { text, level, id }; use the text as an ' +
         'edit_page section). Pass sinceRevision (from an earlier read) to get { unchanged: true } ' +
         'instead of the full page when nothing changed. Pass includeBody: false to get only ' +
@@ -105,10 +114,9 @@ export function createMcpServer(workspace: Workspace): McpServer {
     {
       title: 'Create page',
       description:
-        'Create a new page in a project. Returns the page metadata (id, path, revision, updatedAt, ' +
-        'tags, status); pass includeBody to get the body back too. The markdown body, tags and ' +
-        'status are optional. Send only the markdown body: frontmatter in it is rejected. ' +
-        STATUS_HELP,
+        'Create a new page in a project. Returns the page metadata (id, path, url, revision, ' +
+        'updatedAt, tags); pass includeBody to get the body back too. The markdown body and tags ' +
+        'are optional. Send only the markdown body: frontmatter in it is rejected.',
       inputSchema: {
         projectId: z.string(),
         title: z.string().min(1),
@@ -117,16 +125,12 @@ export function createMcpServer(workspace: Workspace): McpServer {
           .optional()
           .describe('The page body as plain markdown, no frontmatter.'),
         tags: z.array(z.string()).optional(),
-        status: pageStatusSchema.optional(),
         includeBody: includeBodyFlag,
       },
     },
-    ({ projectId, title, markdown, tags, status, includeBody: withBody }) =>
+    ({ projectId, title, markdown, tags, includeBody: withBody }) =>
       respond(async () =>
-        pageResult(
-          await workspace.createPage(projectId, title, markdown ?? '', tags, status),
-          withBody,
-        ),
+        pageResult(await workspace.createPage(projectId, title, markdown ?? '', tags), withBody),
       ),
   )
 
@@ -150,6 +154,25 @@ export function createMcpServer(workspace: Workspace): McpServer {
   )
 
   server.registerTool(
+    'rename_page',
+    {
+      title: 'Rename page',
+      description:
+        "Change a page's title. Its file is renamed to match, kept in the same project; history " +
+        'and comment threads move with it. Pass ifRevision from your last read to refuse the ' +
+        'change if the page changed. Returns the page metadata; pass includeBody to get the body ' +
+        'back too.',
+      inputSchema: {
+        id: z.string(),
+        ...renamePageInput.shape,
+        includeBody: includeBodyFlag,
+      },
+    },
+    ({ id, title, ifRevision, includeBody: withBody }) =>
+      respond(async () => pageResult(await workspace.renamePage(id, title, ifRevision), withBody)),
+  )
+
+  server.registerTool(
     'list_tags',
     {
       title: 'List tags',
@@ -168,18 +191,16 @@ export function createMcpServer(workspace: Workspace): McpServer {
         'Change a page. Pass one of: edits, or body (replaces the whole body and keeps the page ' +
         'id, history and comment threads). Each edit is either { find, replace } (find must occur ' +
         'exactly once in the body) or { section, replace } (replaces the body under that heading ' +
-        'up to the next heading of the same or higher level; the heading itself stays). status can ' +
-        'be set on its own or together with either. Only the markdown body is edited: frontmatter ' +
-        'in it is rejected. Pass ifRevision from your last read to refuse the change if the page ' +
-        'changed. Returns the page metadata (id, path, revision, updatedAt, tags, status); pass ' +
-        'includeBody to get the body back too. Conflicts return the current page in ' +
-        'details.current so you can re-read and retry. ' +
-        STATUS_HELP,
+        'up to the next heading of the same or higher level; the heading itself stays). Only the ' +
+        'markdown body is edited: frontmatter in it is rejected. Pass ifRevision from your last ' +
+        'read to refuse the change if the page changed. Returns the page metadata (id, path, url, ' +
+        'revision, updatedAt, tags); pass includeBody to get the body back too. Conflicts return ' +
+        'the current page in details.current so you can re-read and retry.',
       inputSchema: { id: z.string(), ...editInput.shape, includeBody: includeBodyFlag },
     },
-    ({ id, edits, body, status, ifRevision, includeBody: withBody }) =>
+    ({ id, edits, body, ifRevision, includeBody: withBody }) =>
       respond(async () =>
-        pageResult(await workspace.editPage(id, { edits, body, status }, ifRevision), withBody),
+        pageResult(await workspace.editPage(id, { edits, body }, ifRevision), withBody),
       ),
   )
 

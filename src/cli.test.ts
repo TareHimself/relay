@@ -89,7 +89,12 @@ describe('relay CLI', () => {
     expect((await cli(['set-name', 'Tare', 'Belo'], { env })).out).toContain('"Tare Belo"')
     expect((await cli(['admin'], { env })).out).toBe('Admin: Tare Belo (handle: tare)')
     expect((await cli(['set-name'], { env })).code).toBe(1)
-    const mailmap = await exec('git', ['-C', created.directory, 'config', 'mailmap.file'])
+    const mailmap = await exec('git', [
+      '-C',
+      join(created.directory, 'projects'),
+      'config',
+      'mailmap.file',
+    ])
     expect(await fs.readFile(mailmap.stdout.trim(), 'utf8')).toBe('Tare Belo <tare@relay.local>\n')
   })
 

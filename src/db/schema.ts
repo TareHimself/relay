@@ -8,6 +8,7 @@ export const operations = sqliteTable('operations', {
   actor: text('actor').notNull(),
   event: text('event').notNull(),
   deleted: integer('deleted', { mode: 'boolean' }).notNull().default(false),
+  renameFrom: text('rename_from'),
   commitHash: text('commit_hash'),
   status: text('status', { enum: ['pending', 'complete', 'conflicted'] }).notNull(),
 })
@@ -47,9 +48,6 @@ export const pages = sqliteTable('pages', {
   excerpt: text('excerpt').notNull().default(''),
   updatedAt: text('updated_at').notNull().default(''),
   tags: text('tags', { mode: 'json' }).$type<string[]>().notNull().default([]),
-  status: text('status', { enum: ['draft', 'published'] })
-    .notNull()
-    .default('draft'),
 })
 
 export const tokens = sqliteTable('tokens', {

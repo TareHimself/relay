@@ -119,6 +119,60 @@ describe('scopes and project restriction', () => {
   })
 })
 
+describe('rename routes', () => {
+  it('renames a project by name, for a write token but not a read-only one', async () => {
+    const { store, admin, alpha, mint } = await setup()
+    const reader = client(store, await mint({ name: 'reader', scope: 'read' }))
+    expect((await reader.send('PATCH', `/api/projects/${alpha.id}`, { name: 'Nope' })).status).toBe(
+      403,
+    )
+    const renamed = await json(
+      await admin.send('PATCH', `/api/projects/${alpha.id}`, { name: 'Renamed' }),
+    )
+    expect(renamed).toMatchObject({ id: alpha.id, name: 'Renamed' })
+    expect(
+      (await json(await admin.get('/api/projects'))).map((p: { name: string }) => p.name),
+    ).toContain('Renamed')
+    expect((await admin.send('PATCH', `/api/projects/${alpha.id}`, { name: ' ' })).status).toBe(400)
+  })
+
+  it('confines project rename to a project-restricted token', async () => {
+    const { store, alpha, beta, mint } = await setup()
+    const scoped = client(store, await mint({ name: 'alphaonly', projectId: alpha.id }))
+    expect((await scoped.send('PATCH', `/api/projects/${alpha.id}`, { name: 'Mine' })).status).toBe(
+      200,
+    )
+    expect((await scoped.send('PATCH', `/api/projects/${beta.id}`, { name: 'Nope' })).status).toBe(
+      403,
+    )
+  })
+
+  it('renames a page, moving its path, and enforces ifRevision', async () => {
+    const { admin, page } = await setup()
+    const stale = await admin.send('PATCH', `/api/pages/${page.id}/title`, {
+      title: 'New Title',
+      ifRevision: 'not-current',
+    })
+    expect(stale.status).toBe(409)
+    const renamed = await json(
+      await admin.send('PATCH', `/api/pages/${page.id}/title`, {
+        title: 'New Title',
+        ifRevision: page.revision,
+      }),
+    )
+    expect(renamed).toMatchObject({ id: page.id, title: 'New Title', path: 'alpha/new-title.md' })
+    expect((await admin.get(`/api/pages/${page.id}`)).status).toBe(200)
+  })
+
+  it('blocks page rename for a read-only token', async () => {
+    const { store, page, mint } = await setup()
+    const reader = client(store, await mint({ name: 'reader', scope: 'read' }))
+    expect(
+      (await reader.send('PATCH', `/api/pages/${page.id}/title`, { title: 'Nope' })).status,
+    ).toBe(403)
+  })
+})
+
 describe('page reads and diffs', () => {
   it('returns unchanged for a current sinceRevision', async () => {
     const { admin, page } = await setup()

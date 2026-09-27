@@ -23,14 +23,8 @@ import { Git } from './git'
 import { ThreadService } from './thread-service'
 import { rewriteHistory, type TidySummary } from './tidy'
 import type { Person } from '../shared/accounts'
-import type {
-  IndexProblem,
-  Page,
-  PageStatus,
-  PageSummary,
-  Project,
-  StoreEvent,
-} from '../shared/pages'
+import { docPath } from '../shared/pages'
+import type { IndexProblem, Page, PageSummary, Project, StoreEvent } from '../shared/pages'
 import { parseThreads, threadsPathFor, type Thread } from '../core/threads'
 
 const migrationsFolder = ['../../drizzle', '../drizzle']
@@ -59,7 +53,6 @@ export interface PageVersion {
 export interface PageChange {
   edits?: readonly TextEdit[] | undefined
   body?: string | undefined
-  status?: PageStatus | undefined
 }
 
 interface LoadedPage {
@@ -75,10 +68,45 @@ interface Operation {
   actor: string
   event: string
   deleted?: boolean
+  renameFrom?: string | null
 }
 
 function hasCode(error: unknown, code: string): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === code
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  return fs
+    .access(path)
+    .then(() => true)
+    .catch(() => false)
+}
+
+async function hasLegacyLayout(dataDir: string): Promise<boolean> {
+  if (await pathExists(join(dataDir, '.git'))) return true
+  if (await pathExists(join(dataDir, 'state.db'))) return true
+  for (const entry of await fs.readdir(dataDir, { withFileTypes: true }).catch(() => [])) {
+    if (entry.isDirectory() && (await pathExists(join(dataDir, entry.name, 'project.yaml'))))
+      return true
+  }
+  return false
+}
+
+// Relay used to keep the git repo and state.db as siblings directly under
+// DATA_DIR. Splitting them into projects/ and db/ lets DATA_DIR host other
+// non-Relay state (e.g. a reverse proxy's own data) without it ever landing
+// inside the git-tracked project repo.
+async function migrateLegacyLayout(dataDir: string, repoDir: string, dbDir: string): Promise<void> {
+  if (await pathExists(repoDir)) return
+  if (!(await hasLegacyLayout(dataDir))) return
+  await fs.mkdir(repoDir, { recursive: true })
+  await fs.mkdir(dbDir, { recursive: true })
+  for (const entry of await fs.readdir(dataDir, { withFileTypes: true })) {
+    if (entry.name === 'projects' || entry.name === 'db') continue
+    const from = join(dataDir, entry.name)
+    const to = join(entry.name.startsWith('state.db') ? dbDir : repoDir, entry.name)
+    await fs.rename(from, to)
+  }
 }
 
 function commitIdentity(
@@ -105,6 +133,7 @@ export class RelayStore {
   private readonly db: Database.Database
   private readonly orm: ReturnType<typeof drizzle<typeof schema>>
   private readonly dataDir: string
+  private readonly repoDir: string
   private readonly repo: Git
   readonly tokens: TokenService
   readonly accounts: AccountService
@@ -119,8 +148,9 @@ export class RelayStore {
   private constructor(dataDir: string, now: () => number) {
     this.now = now
     this.dataDir = resolve(dataDir)
-    this.repo = new Git(this.dataDir)
-    this.db = new Database(join(this.dataDir, 'state.db'))
+    this.repoDir = join(this.dataDir, 'projects')
+    this.repo = new Git(this.repoDir)
+    this.db = new Database(join(this.dataDir, 'db', 'state.db'))
     this.db.pragma('journal_mode = WAL')
     this.orm = drizzle(this.db, { schema })
     migrate(this.orm, { migrationsFolder })
@@ -141,11 +171,15 @@ export class RelayStore {
   }
 
   static async open(dataDir: string, options: { now?: () => number } = {}): Promise<RelayStore> {
-    await fs.mkdir(dataDir, { recursive: true })
-    const store = new RelayStore(dataDir, options.now ?? Date.now)
+    const resolved = resolve(dataDir)
+    await fs.mkdir(resolved, { recursive: true })
+    await migrateLegacyLayout(resolved, join(resolved, 'projects'), join(resolved, 'db'))
+    await fs.mkdir(join(resolved, 'projects'), { recursive: true })
+    await fs.mkdir(join(resolved, 'db'), { recursive: true })
+    const store = new RelayStore(resolved, options.now ?? Date.now)
     await store.repo.run(['init', '-q'])
     try {
-      await fs.writeFile(join(store.dataDir, '.gitignore'), 'state.db*\nblobs/\n', { flag: 'wx' })
+      await fs.writeFile(join(store.repoDir, '.gitignore'), 'blobs/\n', { flag: 'wx' })
     } catch (error) {
       if (!hasCode(error, 'EEXIST')) throw error
     }
@@ -160,8 +194,8 @@ export class RelayStore {
   }
 
   private pathFor(path: string): string {
-    const absolute = resolve(this.dataDir, path)
-    const rel = relative(this.dataDir, absolute)
+    const absolute = resolve(this.repoDir, path)
+    const rel = relative(this.repoDir, absolute)
     if (!rel || rel === '..' || rel.startsWith('../') || rel.startsWith('..\\')) {
       throw new StoreError('invalid', 'Invalid path')
     }
@@ -226,6 +260,30 @@ export class RelayStore {
     await this.finishOperation(operation, options)
   }
 
+  private async commitRename(
+    fromPath: string,
+    toPath: string,
+    expected: string,
+    content: string,
+    actor: string,
+    events: StoreEvent[],
+  ): Promise<void> {
+    const operation: Operation = {
+      id: newId(),
+      path: toPath,
+      expected,
+      content,
+      actor,
+      event: JSON.stringify(events),
+      renameFrom: fromPath,
+    }
+    this.orm
+      .insert(schema.operations)
+      .values({ ...operation, status: 'pending' })
+      .run()
+    await this.finishOperation(operation, { verb: 'rename' })
+  }
+
   private async finishOperation(operation: Operation, options: CommitOptions = {}): Promise<void> {
     const existingCommit = await this.repo.run([
       'log',
@@ -236,7 +294,10 @@ export class RelayStore {
       `--grep=Operation-ID: ${operation.id}`,
     ])
     const events = JSON.parse(operation.event) as StoreEvent[]
-    if (!existingCommit && operation.deleted) {
+    if (!existingCommit && operation.renameFrom) {
+      await this.moveFiles(operation.renameFrom, operation)
+      if (await this.repo.hasStagedChanges()) await this.recordCommit(operation, events, options)
+    } else if (!existingCommit && operation.deleted) {
       await this.removeFiles(operation)
       if (await this.repo.hasStagedChanges()) await this.recordCommit(operation, events, options)
     } else if (!existingCommit) {
@@ -302,6 +363,49 @@ export class RelayStore {
     await this.repo.run(['rm', '--cached', '--ignore-unmatch', '-q', '--', ...paths])
   }
 
+  private async moveFiles(fromPath: string, operation: Operation): Promise<void> {
+    const toPath = operation.path
+    const toAbsolute = this.pathFor(toPath)
+    const conflicted = (path: string, current: string | null) => {
+      this.orm
+        .update(schema.operations)
+        .set({ status: 'conflicted' })
+        .where(eq(schema.operations.id, operation.id))
+        .run()
+      throw new StoreError('conflict', 'File changed during rename', { path, current })
+    }
+    const toCurrent = await this.readOptional(toAbsolute)
+    if (toCurrent === null) {
+      const fromCurrent = await this.readOptional(this.pathFor(fromPath))
+      if (fromCurrent !== operation.expected) conflicted(fromPath, fromCurrent)
+      await fs.mkdir(dirname(toAbsolute), { recursive: true })
+      const temporary = `${toAbsolute}.${operation.id}.tmp`
+      await fs.writeFile(temporary, operation.content, 'utf8')
+      await fs.rename(temporary, toAbsolute)
+      await fs.rm(this.pathFor(fromPath), { force: true })
+    } else if (toCurrent !== operation.content) {
+      conflicted(toPath, toCurrent)
+    }
+
+    const fromThreads = threadsPathFor(fromPath)
+    const toThreads = threadsPathFor(toPath)
+    if ((await this.readOptional(this.pathFor(fromThreads))) !== null) {
+      if (!(await this.readOptional(this.pathFor(toThreads)))) {
+        await fs.mkdir(dirname(this.pathFor(toThreads)), { recursive: true })
+        await fs.rename(this.pathFor(fromThreads), this.pathFor(toThreads))
+      } else {
+        await fs.rm(this.pathFor(fromThreads), { force: true })
+      }
+    }
+
+    const staged = [
+      toPath,
+      ...((await this.readOptional(this.pathFor(toThreads))) ? [toThreads] : []),
+    ]
+    await this.repo.run(['add', '--', ...staged])
+    await this.repo.run(['rm', '--cached', '--ignore-unmatch', '-q', '--', fromPath, fromThreads])
+  }
+
   private async recordCommit(
     operation: Operation,
     events: StoreEvent[],
@@ -311,13 +415,15 @@ export class RelayStore {
     const type = events[0]?.type ?? ''
     const verb =
       options.verb ??
-      (type.startsWith('comment.')
-        ? 'comment'
-        : type.endsWith('.created')
-          ? 'create'
-          : type.endsWith('.deleted')
-            ? 'delete'
-            : 'edit')
+      (operation.renameFrom
+        ? 'rename'
+        : type.startsWith('comment.')
+          ? 'comment'
+          : type.endsWith('.created')
+            ? 'create'
+            : type.endsWith('.deleted')
+              ? 'delete'
+              : 'edit')
     const identity = ['-c', 'user.name=Relay', '-c', 'user.email=relay@relay.local']
     const authorEnv = { GIT_AUTHOR_NAME: author.name, GIT_AUTHOR_EMAIL: author.email }
     const previous =
@@ -326,16 +432,11 @@ export class RelayStore {
         : null
 
     if (!previous) {
+      const subject = operation.renameFrom
+        ? `rename: ${operation.renameFrom} -> ${operation.path} (${operation.actor})`
+        : `${verb}: ${operation.path} (${operation.actor})`
       await this.repo.run(
-        [
-          ...identity,
-          'commit',
-          '-q',
-          '-m',
-          `${verb}: ${operation.path} (${operation.actor})`,
-          '-m',
-          `Operation-ID: ${operation.id}`,
-        ],
+        [...identity, 'commit', '-q', '-m', subject, '-m', `Operation-ID: ${operation.id}`],
         authorEnv,
       )
       return
@@ -384,7 +485,7 @@ export class RelayStore {
     const pageBodies = new Map<string, string>()
     const pageThreads = new Map<string, Thread[]>()
     const projectIds = new Set<string>()
-    for (const entry of await fs.readdir(this.dataDir, { withFileTypes: true })) {
+    for (const entry of await fs.readdir(this.repoDir, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'blobs') continue
       const projectPath = `${entry.name}/project.yaml`
       const projectText = await this.readOptional(this.pathFor(projectPath))
@@ -425,11 +526,11 @@ export class RelayStore {
           projectId: project.id,
           title: meta.title,
           path,
+          url: docPath(project.id, meta.id),
           revision: revisionOf(markdown),
           excerpt: excerptOf(markdown),
           updatedAt: (await fs.stat(this.pathFor(path))).mtime.toISOString(),
           tags: meta.tags,
-          status: meta.status,
         })
         const threadsPath = threadsPathFor(path)
         let threads: Thread[] = []
@@ -488,7 +589,7 @@ export class RelayStore {
   }
 
   private indexPage(projectId: string, path: string, markdown: string): void {
-    const { id, title, tags, status, body } = parsePageFile(markdown)
+    const { id, title, tags, body } = parsePageFile(markdown)
     const row = {
       id,
       projectId,
@@ -498,7 +599,6 @@ export class RelayStore {
       excerpt: excerptOf(markdown),
       updatedAt: new Date().toISOString(),
       tags,
-      status,
     }
     this.orm
       .insert(schema.pages)
@@ -549,24 +649,50 @@ export class RelayStore {
     })
   }
 
-  listPages(projectId: string, status?: PageStatus): PageSummary[] {
+  renameProject(id: string, name: string, actor: string): Promise<Project> {
+    return this.serial(async () => {
+      const trimmed = name.trim()
+      if (!trimmed) throw new StoreError('invalid', 'Name cannot be empty')
+      const row = this.orm.select().from(schema.projects).where(eq(schema.projects.id, id)).get()
+      if (!row) throw new StoreError('not_found', 'Project not found')
+      if (trimmed === row.name) return { id: row.id, name: row.name, description: row.description }
+      const path = `${row.path}/project.yaml`
+      const raw = await this.readOptional(this.pathFor(path))
+      if (raw === null) throw new StoreError('not_found', 'Project not found')
+      const document = YAML.parseDocument(raw)
+      document.set('name', trimmed)
+      const next = `${document.toString().trimEnd()}\n`
+      const project = { id: row.id, name: trimmed, description: row.description }
+      const event = newEvent('project.updated', actor, id, { summary: `Renamed to "${trimmed}"` })
+      await this.commitFile(path, raw, next, actor, [event])
+      this.orm
+        .update(schema.projects)
+        .set({ name: trimmed })
+        .where(eq(schema.projects.id, id))
+        .run()
+      this.search.setProject(project)
+      return project
+    })
+  }
+
+  private summaryOf(row: typeof schema.pages.$inferSelect): PageSummary {
+    return { ...row, url: docPath(row.projectId, row.id) }
+  }
+
+  listPages(projectId: string): PageSummary[] {
     return this.orm
       .select()
       .from(schema.pages)
-      .where(
-        and(
-          eq(schema.pages.projectId, projectId),
-          status ? eq(schema.pages.status, status) : undefined,
-        ),
-      )
+      .where(eq(schema.pages.projectId, projectId))
       .orderBy(schema.pages.title)
       .all()
+      .map((row) => this.summaryOf(row))
   }
 
   private pageRow(id: string): PageSummary {
     const row = this.orm.select().from(schema.pages).where(eq(schema.pages.id, id)).get()
     if (!row) throw new StoreError('not_found', 'Page not found')
-    return row
+    return this.summaryOf(row)
   }
 
   private async loadPage(id: string): Promise<LoadedPage> {
@@ -579,7 +705,6 @@ export class RelayStore {
         ...row,
         title: meta.title,
         tags: meta.tags,
-        status: meta.status,
         revision: revisionOf(file),
         excerpt: excerptOf(file),
         body: meta.body,
@@ -597,7 +722,6 @@ export class RelayStore {
     body: string,
     actor: string,
     tags: readonly string[] = [],
-    status: PageStatus = 'draft',
   ): Promise<Page> {
     assertNoFrontmatter(body)
     return this.serial(async () => {
@@ -611,7 +735,7 @@ export class RelayStore {
       if (await this.readOptional(this.pathFor(path)))
         throw new StoreError('conflict', 'Page slug already exists')
       const id = newId()
-      const markdown = `---\n${YAML.stringify({ id, title, status, tags: normalizeTags(tags) })}---\n\n${body.trimEnd()}\n`
+      const markdown = `---\n${YAML.stringify({ id, title, tags: normalizeTags(tags) })}---\n\n${body.trimEnd()}\n`
       const event = newEvent('page.created', actor, projectId, {
         pageId: id,
         revision: revisionOf(markdown),
@@ -628,28 +752,19 @@ export class RelayStore {
     ifRevision: string | undefined,
     actor: string,
   ): Promise<Page> {
-    const { edits, body, status } = change
+    const { edits, body } = change
     if (edits && body !== undefined) throw new StoreError('invalid', 'Pass edits or body, not both')
-    if (!edits && body === undefined && !status)
-      throw new StoreError('invalid', 'Nothing to change: pass edits, body or status')
+    if (!edits && body === undefined)
+      throw new StoreError('invalid', 'Nothing to change: pass edits or body')
     return this.serial(async () => {
       const current = await this.loadPage(id)
       const { page } = current
       if (ifRevision && ifRevision !== page.revision)
         throw new StoreError('conflict', 'Page revision changed', { current: page })
-      const nextBody = edits
-        ? applyEdits(page.body, edits)
-        : body === undefined
-          ? page.body
-          : `${body.trimEnd()}\n`
+      const nextBody = edits ? applyEdits(page.body, edits) : `${(body ?? '').trimEnd()}\n`
       assertNoFrontmatter(nextBody, page.body)
       const next = withBody(current.file, nextBody)
-      return this.commitPageContent(
-        current,
-        status ? withFrontmatter(next, { status }) : next,
-        actor,
-        nextBody === page.body ? { summary: 'Changed status' } : {},
-      )
+      return this.commitPageContent(current, next, actor)
     })
   }
 
@@ -681,6 +796,39 @@ export class RelayStore {
         actor,
         { coalesce: true, summary: 'Changed tags' },
       )
+    })
+  }
+
+  renamePage(
+    id: string,
+    title: string,
+    ifRevision: string | undefined,
+    actor: string,
+  ): Promise<Page> {
+    return this.serial(async () => {
+      const trimmed = title.trim()
+      if (!trimmed) throw new StoreError('invalid', 'Title cannot be empty')
+      const current = await this.loadPage(id)
+      const { page, file } = current
+      if (ifRevision && ifRevision !== page.revision)
+        throw new StoreError('conflict', 'Page revision changed', { current: page })
+      if (trimmed === page.title) return page
+      const next = withFrontmatter(file, { title: trimmed })
+      const newPath = `${dirname(page.path)}/${slugify(trimmed)}.md`
+      const summary = `Renamed to "${trimmed}"`
+      if (newPath === page.path) {
+        return this.commitPageContent(current, next, actor, { summary })
+      }
+      if (await this.readOptional(this.pathFor(newPath)))
+        throw new StoreError('conflict', 'A page with that title already exists')
+      const event = newEvent('page.updated', actor, page.projectId, {
+        pageId: id,
+        revision: revisionOf(next),
+        summary,
+      })
+      await this.commitRename(page.path, newPath, file, next, actor, [event])
+      this.indexPage(page.projectId, newPath, next)
+      return this.readPage(id)
     })
   }
 
@@ -801,7 +949,7 @@ export class RelayStore {
   }
 
   async syncMailmap(): Promise<void> {
-    const file = join(this.dataDir, '.git', 'relay-mailmap')
+    const file = join(this.repoDir, '.git', 'relay-mailmap')
     const plain = (name: string) => name.replace(/[<>\r\n]/g, '')
     const lines = this.accounts
       .users()

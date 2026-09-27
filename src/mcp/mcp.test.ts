@@ -20,6 +20,8 @@ const EXPECTED_TOOLS = [
   'read_page',
   'read_threads',
   'read_version',
+  'rename_page',
+  'rename_project',
   'reply',
   'resolve',
   'restore_version',
@@ -213,17 +215,17 @@ describe('MCP endpoint', () => {
       'path',
       'projectId',
       'revision',
-      'status',
       'tags',
       'title',
       'updatedAt',
+      'url',
     ])
     const edited = await agent.call('edit_page', {
       id: page.id,
       edits: [{ find: 'old goals', replace: 'lean goals' }],
     })
     expect(edited.data).not.toHaveProperty('body')
-    expect(edited.data).toMatchObject({ id: page.id, status: 'draft', tags: [] })
+    expect(edited.data).toMatchObject({ id: page.id, tags: [] })
     const tagged = await agent.call('set_tags', { id: page.id, tags: ['x'] })
     expect(tagged.data).not.toHaveProperty('body')
   })
@@ -237,7 +239,7 @@ describe('MCP endpoint', () => {
     })
     const read = (await agent.call('read_page', { id: page.id })).data
     expect(read.body).not.toContain('---')
-    expect(read.status).toBe('draft')
+    expect(read.url).toBe(`/projects/${read.projectId}/docs/${page.id}`)
     expect(read.outline).toEqual([
       { text: 'Title', level: 1, id: 'title' },
       { text: 'Goals', level: 2, id: 'goals' },
@@ -265,25 +267,11 @@ describe('MCP endpoint', () => {
     expect((await agent.call('read_threads', { pageId: page.id })).data[0].id).toBe(thread.id)
   })
 
-  it('sets status by parameter, filters list_pages by it, and guards the write path', async () => {
+  it('guards the write path against frontmatter and no-op edits', async () => {
     const { store, project, page, mint } = await setup()
     const agent = mcp(store, await mint({ name: 'claude' }))
-    const published = await agent.call('edit_page', { id: page.id, status: 'published' })
-    expect(published.data.status).toBe('published')
-    const draft = await agent.call('create_page', { projectId: project.id, title: 'Rough' })
-    expect(draft.data.status).toBe('draft')
-    const shown = (await agent.call('list_pages', { projectId: project.id })).data
-    expect(shown.map((p: { status: string }) => p.status).sort()).toEqual(['draft', 'published'])
-    const only = (await agent.call('list_pages', { projectId: project.id, status: 'published' }))
-      .data
-    expect(only.map((p: { id: string }) => p.id)).toEqual([page.id])
-    const bogus = await agent.rpc('tools/call', {
-      name: 'edit_page',
-      arguments: { id: page.id, status: 'bogus' },
-    })
-    expect(bogus.result.isError).toBe(true)
 
-    const sneaky = '---\nid: abc\ntitle: Nope\nstatus: published\n---\n\nhello'
+    const sneaky = '---\nid: abc\ntitle: Nope\ntags: [x]\n---\n\nhello'
     const viaCreate = await agent.call('create_page', {
       projectId: project.id,
       title: 'Sneaky',
@@ -327,6 +315,32 @@ describe('MCP endpoint', () => {
     expect((await agent.call('list_projects')).data).toHaveLength(2)
     const reader = mcp(store, await mint({ name: 'ro', scope: 'read' }))
     expect((await reader.call('create_project', { name: 'Gamma' })).isError).toBe(true)
+  })
+
+  it('renames projects and pages', async () => {
+    const { store, project, page, mint } = await setup()
+    const agent = mcp(store, await mint({ name: 'claude' }))
+
+    const renamedProject = await agent.call('rename_project', { id: project.id, name: 'Renamed' })
+    expect(renamedProject.data).toMatchObject({ id: project.id, name: 'Renamed' })
+
+    const renamedPage = await agent.call('rename_page', { id: page.id, title: 'New Title' })
+    expect(renamedPage.data).toMatchObject({ id: page.id, title: 'New Title' })
+    expect(renamedPage.data).not.toHaveProperty('body')
+    const withBody = await agent.call('rename_page', {
+      id: page.id,
+      title: 'New Title',
+      includeBody: true,
+    })
+    expect(withBody.data.body).toContain('old goals')
+
+    const stale = await agent.call('rename_page', {
+      id: page.id,
+      title: 'Yet Another',
+      ifRevision: 'not-current',
+    })
+    expect(stale.isError).toBe(true)
+    expect(stale.data.error).toBe('conflict')
   })
 
   it('enforces read-only scope and project restriction inside tools', async () => {

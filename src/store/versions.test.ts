@@ -8,7 +8,7 @@ const exec = promisify(execFile)
 
 afterEach(cleanupStores)
 
-const dirOf = (store: RelayStore) => (store as unknown as { dataDir: string }).dataDir
+const dirOf = (store: RelayStore) => (store as unknown as { repoDir: string }).repoDir
 
 async function commitsFor(store: RelayStore, path: string): Promise<string[]> {
   const { stdout } = await exec('git', ['-C', dirOf(store), 'log', '--format=%s', '--', path])

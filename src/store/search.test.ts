@@ -7,7 +7,7 @@ import { MARK_END, MARK_START, matchExpression } from './search'
 
 afterEach(cleanupStores)
 
-const dirOf = (store: RelayStore) => (store as unknown as { dataDir: string }).dataDir
+const topDirOf = (store: RelayStore) => (store as unknown as { dataDir: string }).dataDir
 
 describe('matchExpression', () => {
   it('turns words into quoted terms with a prefix on the last one', () => {
@@ -129,9 +129,9 @@ describe('search index', () => {
 
   it('is rebuilt from the files when the index is empty', async () => {
     const { store, jobs, thread } = await setup()
-    const dir = dirOf(store)
+    const dir = topDirOf(store)
     store.close()
-    const db = new Database(join(dir, 'state.db'))
+    const db = new Database(join(dir, 'db', 'state.db'))
     db.exec('DELETE FROM search_index')
     db.close()
 

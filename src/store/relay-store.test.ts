@@ -86,7 +86,13 @@ describe('RelayStore', () => {
 
     const history = await store.history(page.id)
     expect(history).toHaveLength(1)
-    const { stdout } = await exec('git', ['-C', directory, 'log', '--format=%s', '-5'])
+    const { stdout } = await exec('git', [
+      '-C',
+      join(directory, 'projects'),
+      'log',
+      '--format=%s',
+      '-5',
+    ])
     expect(stdout.trim().split('\n')).toEqual([
       'comment: project-alpha/design-notes.threads.json (tare)',
       'comment: project-alpha/design-notes.threads.json (Claude)',
@@ -241,14 +247,20 @@ describe('RelayStore', () => {
       subject: 'edit: project-alpha/design-notes.md (Claude)',
     })
     expect(history[1]?.subject).toBe('create: project-alpha/design-notes.md (tare)')
-    const { stdout: email } = await exec('git', ['-C', directory, 'log', '-1', '--format=%ae'])
+    const { stdout: email } = await exec('git', [
+      '-C',
+      join(directory, 'projects'),
+      'log',
+      '-1',
+      '--format=%ae',
+    ])
     expect(email.trim()).toBe('claude@relay.local')
-    const db = new Database(join(directory, 'state.db'), { readonly: true })
+    const db = new Database(join(directory, 'db', 'state.db'), { readonly: true })
     const completed = db
       .prepare("SELECT commit_hash FROM operations WHERE status = 'complete' ORDER BY id")
       .all() as { commit_hash: string }[]
     expect(completed).toHaveLength(3)
-    const { stdout } = await exec('git', ['-C', directory, 'rev-parse', 'HEAD'])
+    const { stdout } = await exec('git', ['-C', join(directory, 'projects'), 'rev-parse', 'HEAD'])
     expect(completed[2]?.commit_hash).toBe(stdout.trim())
     db.close()
     store.close()

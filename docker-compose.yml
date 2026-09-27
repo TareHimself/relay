@@ -5,9 +5,23 @@ services:
     ports:
       - '${BIND:-127.0.0.1}:47821:47821'
     volumes:
-      - ./data:/data
+      - ./data/relay:/data
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env to create the admin on first start}
       ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
       ADMIN_NAME: ${ADMIN_NAME:-Admin}
       TRUST_PROXY: ${TRUST_PROXY:-}
+
+  tailscale:
+    image: tailscale/tailscale:stable
+    restart: unless-stopped
+    profiles: ['tailscale']
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_HOSTNAME: ${TS_HOSTNAME:-relay}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: 'true'
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ./data/tailscale:/var/lib/tailscale
+      - ./tailscale/serve.json:/config/serve.json:ro

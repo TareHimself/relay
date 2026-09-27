@@ -12,7 +12,8 @@ const exec = promisify(execFile)
 
 afterEach(cleanupStores)
 
-const dirOf = (store: RelayStore) => (store as unknown as { dataDir: string }).dataDir
+const dirOf = (store: RelayStore) => (store as unknown as { repoDir: string }).repoDir
+const topDirOf = (store: RelayStore) => (store as unknown as { dataDir: string }).dataDir
 const git = async (store: RelayStore, ...args: string[]) =>
   (await exec('git', ['-C', dirOf(store), ...args])).stdout.trim()
 
@@ -82,10 +83,11 @@ describe('deletePage', () => {
   it('finishes a delete that was interrupted before the commit', async () => {
     const { store, project, page, keep } = await setup()
     const dir = dirOf(store)
+    const topDir = topDirOf(store)
     const expected = readFileSync(join(dir, page.path), 'utf8')
     store.close()
 
-    const db = new Database(join(dir, 'state.db'))
+    const db = new Database(join(topDir, 'db', 'state.db'))
     const event = {
       id: newId(),
       type: 'page.deleted',
@@ -100,7 +102,7 @@ describe('deletePage', () => {
     ).run(newId(), page.path, expected, '', 'tare', JSON.stringify([event]), 'pending')
     db.close()
 
-    const reopened = await RelayStore.open(dir)
+    const reopened = await RelayStore.open(topDir)
     try {
       await expect(reopened.readPage(page.id)).rejects.toMatchObject({ code: 'not_found' })
       expect((await reopened.readPage(keep.id)).title).toBe('Keeper')

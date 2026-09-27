@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { pageStatusSchema } from './pages'
 import { MAX_TAGS } from './tags'
 import { threadStatusSchema } from './threads'
 
@@ -7,11 +6,15 @@ export const projectInput = z.object({
   name: z.string().trim().min(1),
   description: z.string().default(''),
 })
+export const renameProjectInput = z.object({ name: z.string().trim().min(1) })
+export const renamePageInput = z.object({
+  title: z.string().trim().min(1),
+  ifRevision: z.string().optional(),
+})
 export const pageInput = z.object({
   title: z.string().trim().min(1),
   body: z.string().default(''),
   tags: z.array(z.string()).max(MAX_TAGS).default([]),
-  status: pageStatusSchema.optional(),
 })
 export const editInput = z.object({
   ifRevision: z.string().optional(),
@@ -25,7 +28,6 @@ export const editInput = z.object({
     .min(1)
     .optional(),
   body: z.string().optional(),
-  status: pageStatusSchema.optional(),
 })
 export const saveInput = z.object({ body: z.string(), ifRevision: z.string().min(1) })
 export const threadInput = z.object({

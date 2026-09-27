@@ -2,14 +2,7 @@ import type { Access } from './auth/access'
 import type { Person, SessionRecord, Whoami } from './shared/accounts'
 import { StoreError } from './core/errors'
 import { outlineOf } from './core/sections'
-import type {
-  OutlineEntry,
-  Page,
-  PageStatus,
-  PageSummary,
-  Project,
-  StoreEvent,
-} from './shared/pages'
+import type { OutlineEntry, Page, PageSummary, Project, StoreEvent } from './shared/pages'
 import type { Thread, ThreadStatus } from './shared/threads'
 import { searchKindSchema, type SearchHit, type SearchKind } from './shared/search'
 import type { TagCount } from './shared/tags'
@@ -100,9 +93,15 @@ export class Workspace {
     return this.store.createProject(name, description, this.access.actor)
   }
 
-  listPages(projectId: string, status?: PageStatus): PageSummary[] {
+  renameProject(id: string, name: string): Promise<Project> {
+    this.access.write()
+    this.access.project(id)
+    return this.store.renameProject(id, name, this.access.actor)
+  }
+
+  listPages(projectId: string): PageSummary[] {
     this.access.project(projectId)
-    return this.store.listPages(projectId, status)
+    return this.store.listPages(projectId)
   }
 
   createPage(
@@ -110,11 +109,10 @@ export class Workspace {
     title: string,
     body: string,
     tags: readonly string[] = [],
-    status?: PageStatus,
   ): Promise<Page> {
     this.access.write()
     this.access.project(projectId)
-    return this.store.createPage(projectId, title, body, this.access.actor, tags, status)
+    return this.store.createPage(projectId, title, body, this.access.actor, tags)
   }
 
   setTags(id: string, tags: readonly string[], ifRevision?: string): Promise<Page> {
@@ -150,6 +148,12 @@ export class Workspace {
     this.access.write()
     this.access.page(id)
     return this.store.replacePage(id, body, ifRevision, this.access.actor)
+  }
+
+  renamePage(id: string, title: string, ifRevision?: string): Promise<Page> {
+    this.access.write()
+    this.access.page(id)
+    return this.store.renamePage(id, title, ifRevision, this.access.actor)
   }
 
   history(id: string) {

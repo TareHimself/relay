@@ -5,23 +5,23 @@ export const projectSchema = z.object({
   name: z.string(),
   description: z.string(),
 })
-export const PAGE_STATUSES = ['draft', 'published'] as const
-export const pageStatusSchema = z.enum(PAGE_STATUSES)
-
 export const pageSummarySchema = z.object({
   id: z.string(),
   projectId: z.string(),
   title: z.string(),
   path: z.string(),
+  url: z.string(),
   revision: z.string(),
   excerpt: z.string(),
   updatedAt: z.string(),
   tags: z.array(z.string()),
-  status: pageStatusSchema,
 })
 export const pageSchema = pageSummarySchema.extend({ body: z.string() })
 
-export type PageStatus = z.infer<typeof pageStatusSchema>
+export function docPath(projectId: string, pageId: string): string {
+  return `/projects/${projectId}/docs/${pageId}`
+}
+
 export type Project = z.infer<typeof projectSchema>
 export type PageSummary = z.infer<typeof pageSummarySchema>
 export type Page = z.infer<typeof pageSchema>
