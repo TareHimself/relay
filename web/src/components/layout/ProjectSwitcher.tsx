@@ -1,6 +1,6 @@
 import { css } from '@linaria/core'
-import { Group, Menu, Skeleton, Text, UnstyledButton } from '@mantine/core'
-import { IconCheck, IconPencil, IconPlus, IconSelector } from '@tabler/icons-react'
+import { ActionIcon, Group, Menu, Skeleton, Text, UnstyledButton } from '@mantine/core'
+import { IconCheck, IconHome, IconPencil, IconPlus, IconSelector } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import type { Project } from '@shared/pages'
@@ -28,8 +28,9 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
   const navigate = useNavigate()
   const create = useCreateProject()
   const rename = useRenameProject()
+  const [switcherOpen, setSwitcherOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [renaming, setRenaming] = useState(false)
+  const [renameTarget, setRenameTarget] = useState<Project | null>(null)
 
   function createProject(name: string) {
     create.mutate(
@@ -44,13 +45,19 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
   }
 
   function renameProject(name: string) {
-    if (!current) return
-    rename.mutate({ id: current.id, name }, { onSuccess: () => setRenaming(false) })
+    if (!renameTarget) return
+    rename.mutate({ id: renameTarget.id, name }, { onSuccess: () => setRenameTarget(null) })
   }
 
   return (
     <>
-      <Menu width={248} position="bottom-start" shadow="md">
+      <Menu
+        width={248}
+        position="bottom-start"
+        shadow="md"
+        opened={switcherOpen}
+        onChange={setSwitcherOpen}
+      >
         <Menu.Target>
           <UnstyledButton className={trigger}>
             <Group gap="xs" wrap="nowrap">
@@ -66,22 +73,38 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
           </UnstyledButton>
         </Menu.Target>
         <Menu.Dropdown>
+          <Menu.Item leftSection={<IconHome size={14} />} onClick={() => void navigate('/')}>
+            Home
+          </Menu.Item>
+          <Menu.Divider />
           <Menu.Label>Projects</Menu.Label>
           {projects.map((project) => (
             <Menu.Item
               key={project.id}
-              rightSection={project.id === current?.id ? <IconCheck size={14} /> : null}
               onClick={() => void navigate(projectPath(project.id))}
+              rightSection={
+                <Group gap={4} wrap="nowrap">
+                  {project.id === current?.id && <IconCheck size={14} />}
+                  <ActionIcon
+                    variant="subtle"
+                    color="gray"
+                    size="sm"
+                    aria-label={`Rename ${project.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setSwitcherOpen(false)
+                      setRenameTarget(project)
+                    }}
+                  >
+                    <IconPencil size={14} />
+                  </ActionIcon>
+                </Group>
+              }
             >
               <Text truncate>{project.name}</Text>
             </Menu.Item>
           ))}
-          {projects.length > 0 && <Menu.Divider />}
-          {current && (
-            <Menu.Item leftSection={<IconPencil size={14} />} onClick={() => setRenaming(true)}>
-              Rename project
-            </Menu.Item>
-          )}
+          <Menu.Divider />
           <Menu.Item leftSection={<IconPlus size={14} />} onClick={() => setCreating(true)}>
             New project
           </Menu.Item>
@@ -100,16 +123,16 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
         }}
       />
       <NameDialog
-        opened={renaming}
+        opened={renameTarget !== null}
         title="Rename project"
         label="Project name"
         submitLabel="Rename"
-        initialValue={current?.name}
+        initialValue={renameTarget?.name}
         busy={rename.isPending}
         error={rename.error ? errorMessage(rename.error) : undefined}
         onSubmit={renameProject}
         onClose={() => {
-          setRenaming(false)
+          setRenameTarget(null)
           rename.reset()
         }}
       />
