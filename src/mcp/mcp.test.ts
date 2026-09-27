@@ -302,6 +302,23 @@ describe('MCP endpoint', () => {
     expect((await agent.call('edit_page', { id: page.id })).isError).toBe(true)
   })
 
+  it('answers an unsupported protocol version with a 404 instead of a 500', async () => {
+    const { store, mint } = await setup()
+    const token = await mint({ name: 'claude' })
+    const response = await createApp(store).request('/mcp', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${token}`,
+        'mcp-protocol-version': '2099-01-01',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+    })
+    expect(response.status).toBe(404)
+    expect((await response.json()).error.message).toContain('Unsupported protocol version')
+  })
+
   it('creates projects', async () => {
     const { store, mint } = await setup()
     const agent = mcp(store, await mint({ name: 'claude' }))

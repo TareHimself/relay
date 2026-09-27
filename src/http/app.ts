@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
 import { StoreError } from '../core/errors'
 import { mcpHandler } from '../mcp/handler'
@@ -53,6 +54,17 @@ export function createApp(store: RelayStore) {
       return c.json({ error: error.code, message: error.message, details: error.details }, status)
     }
     if (error instanceof z.ZodError) return c.json({ error: 'invalid', issues: error.issues }, 400)
+    if (error instanceof HTTPException) {
+      if (error.status >= 500) console.error(error)
+      else {
+        const client = c.req.header('user-agent') ?? 'unknown'
+        const version = c.req.header('mcp-protocol-version') ?? 'none'
+        console.warn(
+          `${c.req.method} ${c.req.path} refused with ${error.status} (mcp-protocol-version: ${version}, user-agent: ${client})`,
+        )
+      }
+      return error.getResponse()
+    }
     console.error(error)
     return c.json({ error: 'internal', message: 'Internal server error' }, 500)
   })
