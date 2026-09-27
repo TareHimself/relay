@@ -239,7 +239,7 @@ describe('MCP endpoint', () => {
     })
     const read = (await agent.call('read_page', { id: page.id })).data
     expect(read.body).not.toContain('---')
-    expect(read.url).toBe(`/projects/${read.projectId}/docs/${page.id}`)
+    expect(read.url).toBe(`/doc/${page.id}`)
     expect(read.outline).toEqual([
       { text: 'Title', level: 1, id: 'title' },
       { text: 'Goals', level: 2, id: 'goals' },

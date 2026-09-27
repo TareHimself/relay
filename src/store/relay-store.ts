@@ -23,7 +23,7 @@ import { Git } from './git'
 import { ThreadService } from './thread-service'
 import { rewriteHistory, type TidySummary } from './tidy'
 import type { Person } from '../shared/accounts'
-import { docPath } from '../shared/pages'
+import { docHref } from '../shared/pages'
 import type { IndexProblem, Page, PageSummary, Project, StoreEvent } from '../shared/pages'
 import { parseThreads, threadsPathFor, type Thread } from '../core/threads'
 
@@ -537,7 +537,7 @@ export class RelayStore {
           projectId: project.id,
           title: meta.title,
           path,
-          url: this.urlFor(project.id, meta.id),
+          url: this.urlFor(meta.id),
           revision: revisionOf(markdown),
           excerpt: excerptOf(markdown),
           updatedAt: (await fs.stat(this.pathFor(path))).mtime.toISOString(),
@@ -686,12 +686,12 @@ export class RelayStore {
     })
   }
 
-  private urlFor(projectId: string, pageId: string): string {
-    return (this.publicUrl ?? '') + docPath(projectId, pageId)
+  private urlFor(pageId: string): string {
+    return (this.publicUrl ?? '') + docHref(pageId)
   }
 
   private summaryOf(row: typeof schema.pages.$inferSelect): PageSummary {
-    return { ...row, url: this.urlFor(row.projectId, row.id) }
+    return { ...row, url: this.urlFor(row.id) }
   }
 
   listPages(projectId: string): PageSummary[] {

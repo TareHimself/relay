@@ -27,7 +27,7 @@ describe('RelayStore', () => {
     const store = await RelayStore.open(directory)
     const project = await store.createProject('Alpha', '', 'tare')
     const page = await store.createPage(project.id, 'Plan', 'v0', 'tare')
-    expect(page.url).toBe(`/projects/${project.id}/docs/${page.id}`)
+    expect(page.url).toBe(`/doc/${page.id}`)
     expect(store.listPages(project.id)[0]?.url).toBe(page.url)
     store.close()
 
@@ -36,7 +36,7 @@ describe('RelayStore', () => {
     })
     try {
       const fresh = await withPublicUrl.readPage(page.id)
-      expect(fresh.url).toBe(`https://relay.example.ts.net/projects/${project.id}/docs/${page.id}`)
+      expect(fresh.url).toBe(`https://relay.example.ts.net/doc/${page.id}`)
     } finally {
       withPublicUrl.close()
     }

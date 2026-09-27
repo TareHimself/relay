@@ -76,7 +76,7 @@ A page file is YAML frontmatter (`id`, `title`, `tags`) followed by the markdown
 - `edit_page` takes `edits` (`{ find, replace }` or `{ section, replace }`) **or** `body` (replace the whole body, keeping the id, history and threads). Pass `ifRevision` to refuse the change if the page moved.
 - `rename_page` changes a page's title; its file is renamed to match (history and comment threads move with it). `rename_project` changes a project's display name without moving anything.
 - `read_page` returns `body` and an `outline` of headings; `includeBody: false` returns metadata and outline only.
-- `create_page`, `edit_page`, `set_tags` and `rename_page` return metadata only (`id`, `path`, `url`, `revision`, `updatedAt`, `tags`) unless `includeBody` is set. `url` is the page's path in the web UI (`/projects/<id>/docs/<id>`) — relative by default, so it's correct under any host Relay is reachable at; set `PUBLIC_URL` to get an absolute, clickable link instead (worth it once Relay has one settled address, e.g. behind Tailscale).
+- `create_page`, `edit_page`, `set_tags` and `rename_page` return metadata only (`id`, `path`, `url`, `revision`, `updatedAt`, `tags`) unless `includeBody` is set. `url` is a short link (`/doc/<id>`, page ids are unique on their own) that the web app resolves and forwards to the page's real location — relative by default, so it's correct under any host Relay is reachable at; set `PUBLIC_URL` to get an absolute, clickable link instead (worth it once Relay has one settled address, e.g. behind Tailscale).
 
 ## Agents (MCP)
 

@@ -54,6 +54,16 @@ export function usePage(pageId: string | undefined) {
   })
 }
 
+const pageLocationSchema = z.object({ id: z.string(), projectId: z.string() })
+
+export function usePageProject(pageId: string | undefined) {
+  return useQuery({
+    queryKey: [...keys.page(pageId ?? ''), 'project'] as const,
+    queryFn: () => http.get(`/pages/${pageId}?includeBody=false`, pageLocationSchema),
+    enabled: pageId !== undefined,
+  })
+}
+
 export function useThreads(pageId: string) {
   return useQuery({
     queryKey: keys.threads(pageId),

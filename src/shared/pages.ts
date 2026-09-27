@@ -18,8 +18,8 @@ export const pageSummarySchema = z.object({
 })
 export const pageSchema = pageSummarySchema.extend({ body: z.string() })
 
-export function docPath(projectId: string, pageId: string): string {
-  return `/projects/${projectId}/docs/${pageId}`
+export function docHref(pageId: string): string {
+  return `/doc/${pageId}`
 }
 
 export type Project = z.infer<typeof projectSchema>
