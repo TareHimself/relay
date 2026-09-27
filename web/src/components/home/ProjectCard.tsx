@@ -1,9 +1,13 @@
 import { css } from '@linaria/core'
-import { Box, Group, Paper, Stack, Text } from '@mantine/core'
-import { IconPlus } from '@tabler/icons-react'
+import { ActionIcon, Group, Menu, Paper, Stack, Text } from '@mantine/core'
+import { IconDots, IconPencil, IconPlus } from '@tabler/icons-react'
+import { useState } from 'react'
 import { Link } from 'react-router'
 import type { Project } from '@shared/pages'
+import { errorMessage } from '../../api/http'
+import { useRenameProject } from '../../api/queries'
 import { projectPath } from '../../lib/paths'
+import { NameDialog } from '../common/NameDialog'
 
 const card = css`
   display: block;
@@ -38,51 +42,88 @@ const newCard = css`
     color: var(--mantine-color-text);
   }
 `
-const badge = css`
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--mantine-color-green-filled);
-  color: white;
-  font-size: 15px;
-  font-weight: 700;
-`
 
 interface ProjectCardProps {
   project: Project
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
+  const rename = useRenameProject()
+  const [renaming, setRenaming] = useState(false)
+
+  function renameProject(name: string) {
+    rename.mutate({ id: project.id, name }, { onSuccess: () => setRenaming(false) })
+  }
+
   return (
-    <Paper
-      component={Link}
-      to={projectPath(project.id)}
-      withBorder
-      radius="md"
-      p="md"
-      className={card}
-    >
-      <Stack gap={8} h="100%">
-        <Group gap={8} wrap="nowrap">
-          <Box className={badge}>{project.name.slice(0, 1).toUpperCase()}</Box>
-          <Text fw={600} lineClamp={1}>
-            {project.name}
+    <>
+      <Paper
+        component={Link}
+        to={projectPath(project.id)}
+        withBorder
+        radius="md"
+        p="md"
+        className={card}
+      >
+        <Stack gap={8} h="100%">
+          <Group justify="space-between" wrap="nowrap" gap={4}>
+            <Text fw={600} lineClamp={1}>
+              {project.name}
+            </Text>
+            <Menu position="bottom-end" width={180} shadow="md">
+              <Menu.Target>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="sm"
+                  aria-label="Project actions"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                  }}
+                >
+                  <IconDots size={16} />
+                </ActionIcon>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<IconPencil size={14} />}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    setRenaming(true)
+                  }}
+                >
+                  Rename project
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
+          <Text
+            size="sm"
+            c="dimmed"
+            lineClamp={3}
+            fs={project.description ? undefined : 'italic'}
+            flex={1}
+          >
+            {project.description || 'No description'}
           </Text>
-        </Group>
-        <Text
-          size="sm"
-          c="dimmed"
-          lineClamp={3}
-          fs={project.description ? undefined : 'italic'}
-          flex={1}
-        >
-          {project.description || 'No description'}
-        </Text>
-      </Stack>
-    </Paper>
+        </Stack>
+      </Paper>
+      <NameDialog
+        opened={renaming}
+        title="Rename project"
+        label="Project name"
+        submitLabel="Rename"
+        initialValue={project.name}
+        busy={rename.isPending}
+        error={rename.error ? errorMessage(rename.error) : undefined}
+        onSubmit={renameProject}
+        onClose={() => {
+          setRenaming(false)
+          rename.reset()
+        }}
+      />
+    </>
   )
 }
 

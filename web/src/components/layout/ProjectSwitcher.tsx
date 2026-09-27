@@ -1,5 +1,5 @@
 import { css } from '@linaria/core'
-import { Box, Group, Menu, Skeleton, Text, UnstyledButton } from '@mantine/core'
+import { Group, Menu, Skeleton, Text, UnstyledButton } from '@mantine/core'
 import { IconCheck, IconPencil, IconPlus, IconSelector } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
@@ -18,19 +18,6 @@ const trigger = css`
     background: var(--mantine-color-default-border);
   }
 `
-const badge = css`
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  background: var(--mantine-color-green-filled);
-  color: white;
-  font-size: 13px;
-  font-weight: 700;
-`
-
 interface ProjectSwitcherProps {
   projects: Project[]
   current: Project | undefined
@@ -67,11 +54,6 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
         <Menu.Target>
           <UnstyledButton className={trigger}>
             <Group gap="xs" wrap="nowrap">
-              {loading ? (
-                <Skeleton height={26} width={26} radius={6} />
-              ) : (
-                <Box className={badge}>{(current?.name ?? '?').slice(0, 1).toUpperCase()}</Box>
-              )}
               {loading ? (
                 <Skeleton height={14} flex={1} />
               ) : (
