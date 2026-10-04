@@ -164,6 +164,9 @@ export const globals = css`
     .cm-editor-host .relay-svg-block[data-error] {
       color: var(--mantine-color-red-text);
     }
+    .cm-editor-host .cm-link {
+      cursor: pointer;
+    }
     .relay-heading-placeholder {
       color: var(--mantine-color-dimmed);
       opacity: 0.55;
