@@ -140,6 +140,30 @@ export const globals = css`
     .cm-editor-host .cm-table-widget tbody tr:last-child td {
       border-bottom: 0;
     }
+    .cm-editor-host .cm-table-inserter::before {
+      content: '';
+      position: absolute;
+    }
+    .cm-editor-host .cm-table-inserter--row::before {
+      inset: -4px -14px -4px -4px;
+    }
+    .cm-editor-host .cm-table-inserter--column::before {
+      inset: -4px -4px -14px -4px;
+    }
+    .cm-editor-host .relay-svg-block {
+      display: flex;
+      justify-content: center;
+      padding: 12px;
+      border-radius: var(--mantine-radius-md);
+      cursor: pointer;
+    }
+    .cm-editor-host .relay-svg-block img {
+      max-width: 100%;
+      height: auto;
+    }
+    .cm-editor-host .relay-svg-block[data-error] {
+      color: var(--mantine-color-red-text);
+    }
     .relay-heading-placeholder {
       color: var(--mantine-color-dimmed);
       opacity: 0.55;

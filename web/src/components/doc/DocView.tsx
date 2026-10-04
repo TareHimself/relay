@@ -28,6 +28,8 @@ import { DocEditor } from '../../editor/DocEditor'
 import { headingPlaceholder } from '../../editor/headingPlaceholder'
 import { linkDraftFromSelection } from '../../editor/link'
 import { headingShortcut } from '../../editor/headingShortcut'
+import { CellCommentBar } from '../../editor/CellCommentBar'
+import { svgBlock } from '../../editor/svgBlock'
 import { SelectionBar } from '../../editor/SelectionBar'
 import { draftFromSelection } from '../../editor/selectionDraft'
 import { useCommentLayout } from '../../editor/useCommentLayout'
@@ -127,6 +129,7 @@ export function DocView({ page, projectName }: DocViewProps) {
       headingPlaceholder,
       codeBlockExitKeys,
       codeBlockCopy,
+      svgBlock,
     ],
     [bridge],
   )
@@ -335,6 +338,7 @@ export function DocView({ page, projectName }: DocViewProps) {
     <Frame ref={frame} data-width={pageWidth}>
       {gutterRoom && <OutlineGutter />}
       <LinkDialog view={view} />
+      <CellCommentBar view={view} onComment={startDraft} />
       <DeleteDocDialog
         page={page}
         commentCount={threads.length}
