@@ -177,6 +177,17 @@ describe('MCP endpoint', () => {
     expect((await agent.call('read_threads', { pageId: page.id })).data).toHaveLength(2)
   })
 
+  it('refuses to create a page without a body instead of silently making an empty one', async () => {
+    const { store, project, mint } = await setup()
+    const agent = mcp(store, await mint({ name: 'claude' }))
+    const reply = await agent.rpc('tools/call', {
+      name: 'create_page',
+      arguments: { projectId: project.id, title: 'Stale client', markdown: 'dropped' },
+    })
+    expect(reply.result.isError).toBe(true)
+    expect((await agent.call('list_pages', { projectId: project.id })).data).toHaveLength(1)
+  })
+
   it('lists projects and pages, creates pages, and shows history and diffs', async () => {
     const { store, project, page, mint } = await setup()
     const agent = mcp(store, await mint({ name: 'claude' }))

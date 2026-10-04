@@ -145,14 +145,16 @@ export function createMcpServer(workspace: Workspace): McpServer {
       inputSchema: {
         projectId: z.string(),
         title: z.string().min(1),
-        body: z.string().optional().describe('The page body as plain markdown, no frontmatter.'),
+        body: z
+          .string()
+          .describe('The page body as plain markdown, no frontmatter. Use "" for an empty page.'),
         tags: z.array(z.string()).optional(),
         includeBody: includeBodyFlag,
       },
     },
     ({ projectId, title, body, tags, includeBody: withBody }) =>
       respond(async () =>
-        pageResult(await workspace.createPage(projectId, title, body ?? '', tags), withBody),
+        pageResult(await workspace.createPage(projectId, title, body, tags), withBody),
       ),
   )
 
