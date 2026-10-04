@@ -1,4 +1,4 @@
-import { SimpleGrid, Stack, Title } from '@mantine/core'
+import { Group, SegmentedControl, SimpleGrid, Stack, Title } from '@mantine/core'
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { useProjectPages, useProjects } from '../api/queries'
@@ -7,6 +7,7 @@ import { ProjectDescription } from '../components/home/ProjectDescription'
 import { ProjectInstructionsSection } from '../components/settings/ProjectInstructionsSection'
 import { NewDocDialog } from '../components/layout/NewDocDialog'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
+import { usePrefsStore, type HomeSort } from '../stores/prefsStore'
 
 export function ProjectHome() {
   const { projectId } = useParams()
@@ -14,9 +15,16 @@ export function ProjectHome() {
   const pages = useProjectPages(projectId).data
   const [creating, setCreating] = useState(false)
   useDocumentTitle(project?.name)
-  const recent = useMemo(
-    () => [...(pages ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [pages],
+  const sort = usePrefsStore((state) => state.homeSort)
+  const setSort = usePrefsStore((state) => state.setHomeSort)
+  const sorted = useMemo(
+    () =>
+      [...(pages ?? [])].sort((a, b) =>
+        sort === 'title'
+          ? a.title.localeCompare(b.title, undefined, { numeric: true })
+          : b.updatedAt.localeCompare(a.updatedAt),
+      ),
+    [pages, sort],
   )
   if (!project) return null
 
@@ -27,8 +35,20 @@ export function ProjectHome() {
         <ProjectDescription project={project} />
         <ProjectInstructionsSection projectId={project.id} />
       </Stack>
+      <Group justify="flex-end">
+        <SegmentedControl
+          size="xs"
+          radius="md"
+          value={sort}
+          onChange={(value) => setSort(value as HomeSort)}
+          data={[
+            { label: 'Title', value: 'title' },
+            { label: 'Recently edited', value: 'recent' },
+          ]}
+        />
+      </Group>
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing="md">
-        {recent.map((page) => (
+        {sorted.map((page) => (
           <DocCard key={page.id} projectId={project.id} page={page} />
         ))}
         <NewDocCard onClick={() => setCreating(true)} />

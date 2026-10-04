@@ -2,10 +2,13 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
 export type PageWidth = 'standard' | 'full'
+export type HomeSort = 'title' | 'recent'
 
 interface PrefsState {
   pageWidth: PageWidth
   togglePageWidth: () => void
+  homeSort: HomeSort
+  setHomeSort: (sort: HomeSort) => void
   sidebarCollapsed: boolean
   toggleSidebar: () => void
   lastProjectId: string | null
@@ -18,6 +21,8 @@ export const usePrefsStore = create<PrefsState>()(
       pageWidth: 'standard',
       togglePageWidth: () =>
         set((state) => ({ pageWidth: state.pageWidth === 'standard' ? 'full' : 'standard' })),
+      homeSort: 'title',
+      setHomeSort: (homeSort) => set({ homeSort }),
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       lastProjectId: null,
