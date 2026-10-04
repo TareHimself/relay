@@ -46,3 +46,44 @@ export async function openDoc(page: Page, projectId: string, pageId: string) {
   await page.goto(docUrl(projectId, pageId))
   await page.locator('.cm-content').waitFor()
 }
+
+export async function createProject(page: Page, name: string) {
+  const response = await page.request.post('/api/projects', { headers, data: { name } })
+  expect(response.ok()).toBe(true)
+  return (await response.json()) as { id: string; name: string }
+}
+
+export async function mintScopedToken(
+  page: Page,
+  input: { name: string; scope: 'read' | 'write'; projectId?: string },
+) {
+  const response = await page.request.post('/api/tokens', {
+    headers,
+    data: { ...input, name: `${input.name}-${Date.now()}` },
+  })
+  expect(response.ok()).toBe(true)
+  return ((await response.json()) as { token: string }).token
+}
+
+export function mcpClient(page: Page, token: string) {
+  const post = (payload: unknown) =>
+    page.request.post('/mcp', {
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'application/json, text/event-stream',
+        'content-type': 'application/json',
+      },
+      data: payload,
+    })
+  let id = 0
+  const rpc = async (method: string, params: unknown = {}) =>
+    (await (await post({ jsonrpc: '2.0', id: ++id, method, params })).json()) as {
+      result: any
+    }
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const { result } = await rpc('tools/call', { name, arguments: args })
+    const text = result.content?.[0]?.text as string
+    return { isError: result.isError === true, data: JSON.parse(text) as any }
+  }
+  return { rpc, call }
+}
