@@ -3,7 +3,7 @@ import { styled } from '@linaria/react'
 import { Stack } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { EditorView } from '@codemirror/view'
-import { useSearchParams } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { resolveAnchor } from '@shared/anchors'
 import type { Page } from '@shared/pages'
@@ -29,6 +29,7 @@ import { headingPlaceholder } from '../../editor/headingPlaceholder'
 import { linkDraftFromSelection } from '../../editor/link'
 import { headingShortcut } from '../../editor/headingShortcut'
 import { CellCommentBar } from '../../editor/CellCommentBar'
+import { linkClicks } from '../../editor/linkClicks'
 import { svgBlock } from '../../editor/svgBlock'
 import { SelectionBar } from '../../editor/SelectionBar'
 import { draftFromSelection } from '../../editor/selectionDraft'
@@ -105,6 +106,7 @@ interface DocViewProps {
 
 export function DocView({ page, projectName }: DocViewProps) {
   const sync = useDocSync(page)
+  const navigate = useNavigate()
   const { bridge, view, tick } = useEditorBridge((threadId) =>
     useUiStore.getState().setActiveThread(threadId),
   )
@@ -130,8 +132,9 @@ export function DocView({ page, projectName }: DocViewProps) {
       codeBlockExitKeys,
       codeBlockCopy,
       svgBlock,
+      linkClicks((path) => void navigate(path)),
     ],
-    [bridge],
+    [bridge, navigate],
   )
   const wide = useMediaQuery('(min-width: 62em)') ?? true
   const columns = useRef<HTMLDivElement>(null)
