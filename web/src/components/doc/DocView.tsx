@@ -29,6 +29,7 @@ import { headingPlaceholder } from '../../editor/headingPlaceholder'
 import { linkDraftFromSelection } from '../../editor/link'
 import { headingShortcut } from '../../editor/headingShortcut'
 import { CellCommentBar } from '../../editor/CellCommentBar'
+import { LinkHoverCard } from '../../editor/LinkHoverCard'
 import { linkClicks } from '../../editor/linkClicks'
 import { svgBlock } from '../../editor/svgBlock'
 import { SelectionBar } from '../../editor/SelectionBar'
@@ -341,6 +342,7 @@ export function DocView({ page, projectName }: DocViewProps) {
     <Frame ref={frame} data-width={pageWidth}>
       {gutterRoom && <OutlineGutter />}
       <LinkDialog view={view} />
+      <LinkHoverCard view={view} navigate={(path) => void navigate(path)} />
       <CellCommentBar view={view} onComment={startDraft} />
       <DeleteDocDialog
         page={page}
