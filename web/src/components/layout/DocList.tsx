@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router'
 import type { PageSummary } from '@shared/pages'
 import { hasTag } from '@shared/tags'
 import { docPath, projectPath } from '../../lib/paths'
+import { MarqueeText } from '../common/MarqueeText'
 import { Eyebrow } from '../common/Eyebrow'
 import { NewDocDialog } from './NewDocDialog'
 
@@ -122,7 +123,7 @@ export function DocList({ projectId, pages, loading, activeDocId, homeActive }: 
           {shown.map((page) => (
             <NavLink
               key={page.id}
-              label={<Text truncate>{page.title}</Text>}
+              label={<MarqueeText>{page.title}</MarqueeText>}
               leftSection={<IconFileText size={16} />}
               active={page.id === activeDocId}
               variant="light"

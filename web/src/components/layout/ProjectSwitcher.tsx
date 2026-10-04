@@ -7,6 +7,7 @@ import type { Project } from '@shared/pages'
 import { errorMessage } from '../../api/http'
 import { useCreateProject, useRenameProject } from '../../api/queries'
 import { projectPath } from '../../lib/paths'
+import { MarqueeText } from '../common/MarqueeText'
 import { NameDialog } from '../common/NameDialog'
 
 const trigger = css`
@@ -81,6 +82,7 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
           {projects.map((project) => (
             <Menu.Item
               key={project.id}
+              styles={{ itemLabel: { minWidth: 0 } }}
               onClick={() => void navigate(projectPath(project.id))}
               rightSection={
                 <Group gap={4} wrap="nowrap">
@@ -101,7 +103,7 @@ export function ProjectSwitcher({ projects, current, loading }: ProjectSwitcherP
                 </Group>
               }
             >
-              <Text truncate>{project.name}</Text>
+              <MarqueeText>{project.name}</MarqueeText>
             </Menu.Item>
           ))}
           <Menu.Divider />
