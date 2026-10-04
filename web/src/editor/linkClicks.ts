@@ -81,9 +81,11 @@ export function openHref(href: string, navigate: (path: string) => void) {
 
 function hrefAt(view: EditorView, event: MouseEvent): string | null {
   const target = event.target
-  if (!(target instanceof HTMLElement) || !target.closest('.cm-link')) return null
+  const element = target instanceof HTMLElement ? target.closest('.cm-link') : null
+  if (!element) return null
   const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
-  const raw = pos === null ? null : linkUrlAt(view, pos)
+  const raw =
+    (pos === null ? null : linkUrlAt(view, pos)) ?? linkUrlAt(view, view.posAtDOM(element) + 1)
   return raw ? normalizeLink(raw) : null
 }
 

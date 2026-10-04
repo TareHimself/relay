@@ -16,15 +16,6 @@ const card = css`
   z-index: 200;
   width: ${CARD_WIDTH}px;
   padding: 4px 4px 4px 12px;
-
-  &::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: -16px;
-    height: 16px;
-  }
 `
 
 interface HoveredLink {
