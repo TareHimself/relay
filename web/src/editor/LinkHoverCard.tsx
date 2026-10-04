@@ -7,7 +7,8 @@ import { useUiStore } from '../stores/uiStore'
 import { linkAt, normalizeLink } from './link'
 import { linkUrlAt, openHref } from './linkClicks'
 
-const HIDE_DELAY_MS = 250
+const HIDE_DELAY_MS = 300
+const SAFE_PX = 6
 const CARD_WIDTH = 300
 
 const card = css`
@@ -15,6 +16,15 @@ const card = css`
   z-index: 200;
   width: ${CARD_WIDTH}px;
   padding: 4px 4px 4px 12px;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -16px;
+    height: 16px;
+  }
 `
 
 interface HoveredLink {
@@ -25,6 +35,7 @@ interface HoveredLink {
   left: number
   top: number
   editable: boolean
+  anchor: { left: number; right: number; top: number; bottom: number }
 }
 
 const MARKDOWN_LINK = /\[([^\]]*)\]\(([^)\s]*)[^)]*\)/g
@@ -53,20 +64,48 @@ interface LinkHoverCardProps {
 export function LinkHoverCard({ view, navigate }: LinkHoverCardProps) {
   const [link, setLink] = useState<HoveredLink | null>(null)
   const hideTimer = useRef<number>(0)
+  const hidePending = useRef(false)
+  const shown = useRef<HoveredLink | null>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    shown.current = link
+  }, [link])
 
   useEffect(() => {
     if (!view) return
-    const cancelHide = () => window.clearTimeout(hideTimer.current)
+    const cancelHide = () => {
+      window.clearTimeout(hideTimer.current)
+      hidePending.current = false
+    }
     const scheduleHide = () => {
-      cancelHide()
-      hideTimer.current = window.setTimeout(() => setLink(null), HIDE_DELAY_MS)
+      if (hidePending.current) return
+      hidePending.current = true
+      hideTimer.current = window.setTimeout(() => {
+        hidePending.current = false
+        setLink(null)
+      }, HIDE_DELAY_MS)
+    }
+    const onDocumentMove = (event: MouseEvent) => {
+      const open = shown.current
+      if (!open) return
+      const card = cardRef.current?.getBoundingClientRect()
+      const box = {
+        left: Math.min(open.anchor.left, card?.left ?? open.anchor.left) - SAFE_PX,
+        right: Math.max(open.anchor.right, card?.right ?? open.anchor.right) + SAFE_PX,
+        top: Math.min(open.anchor.top, card?.top ?? open.anchor.top) - SAFE_PX,
+        bottom: Math.max(open.anchor.bottom, card?.bottom ?? open.anchor.bottom) + SAFE_PX,
+      }
+      const inside =
+        event.clientX >= box.left &&
+        event.clientX <= box.right &&
+        event.clientY >= box.top &&
+        event.clientY <= box.bottom
+      if (inside) cancelHide()
+      else scheduleHide()
     }
     const onMove = (event: MouseEvent) => {
       const element = (event.target as HTMLElement).closest?.('.cm-link')
-      if (!element) {
-        scheduleHide()
-        return
-      }
+      if (!element) return
       const cell = element.closest('[data-cell-from]')
       let found: { from: number; to: number; label: string; url: string } | null = null
       let editable = true
@@ -93,26 +132,27 @@ export function LinkHoverCard({ view, navigate }: LinkHoverCardProps) {
       if (!found) return
       cancelHide()
       const rect = element.getBoundingClientRect()
-      setLink((current) =>
-        current && current.url === found.url && current.from === found.from
-          ? current
+      setLink((previous) =>
+        previous && previous.url === found.url && previous.from === found.from
+          ? previous
           : {
               ...found,
               editable,
+              anchor: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
               left: Math.min(rect.left, window.innerWidth - CARD_WIDTH - 8),
-              top: rect.bottom + 4,
+              top: rect.bottom + 2,
             },
       )
     }
     const hide = () => setLink(null)
     view.dom.addEventListener('mousemove', onMove)
-    view.dom.addEventListener('mouseleave', scheduleHide)
+    document.addEventListener('mousemove', onDocumentMove)
     view.dom.addEventListener('mousedown', hide)
     window.addEventListener('scroll', hide, true)
     return () => {
       cancelHide()
       view.dom.removeEventListener('mousemove', onMove)
-      view.dom.removeEventListener('mouseleave', scheduleHide)
+      document.removeEventListener('mousemove', onDocumentMove)
       view.dom.removeEventListener('mousedown', hide)
       window.removeEventListener('scroll', hide, true)
     }
@@ -154,12 +194,9 @@ export function LinkHoverCard({ view, navigate }: LinkHoverCardProps) {
       withBorder
       shadow="md"
       radius="md"
+      ref={cardRef}
       className={card}
       style={{ left: link.left, top: link.top }}
-      onMouseEnter={() => window.clearTimeout(hideTimer.current)}
-      onMouseLeave={() => {
-        hideTimer.current = window.setTimeout(() => setLink(null), HIDE_DELAY_MS)
-      }}
     >
       <Group gap={2} wrap="nowrap">
         <Text size="sm" c="dimmed" truncate flex={1}>
