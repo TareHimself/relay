@@ -1,3 +1,4 @@
+/* oxlint-disable typescript/no-explicit-any -- MCP replies are untyped JSON in tests */
 import { expect, type Page } from '@playwright/test'
 
 export const ORIGIN = 'http://127.0.0.1:47998'
