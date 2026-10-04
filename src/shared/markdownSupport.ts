@@ -39,3 +39,14 @@ export const MARKDOWN_SUPPORT = {
     'Comments anchor to text. Text inside a table cell is commentable but is not highlighted.',
   ],
 } as const
+
+export function markdownSupportSummary(): string {
+  const supported = MARKDOWN_SUPPORT.supported.map((item) => `- ${item.feature}: ${item.syntax}`)
+  const unsupported = MARKDOWN_SUPPORT.notSupported.map((item) => `- ${item}`)
+  return [
+    'What pages can render (always true, call markdown_support for the same list):',
+    ...supported,
+    'Not supported:',
+    ...unsupported,
+  ].join('\n')
+}

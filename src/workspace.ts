@@ -1,6 +1,7 @@
 import type { Access } from './auth/access'
 import type { Person, SessionRecord, Whoami } from './shared/accounts'
 import { StoreError } from './core/errors'
+import { markdownSupportSummary } from './shared/markdownSupport'
 import { outlineOf } from './core/sections'
 import type {
   OutlineEntry,
@@ -118,7 +119,7 @@ export class Workspace {
   }
 
   agentInstructions(): string {
-    const sections = [this.store.settings.agentInstructions().text]
+    const sections = [this.store.settings.agentInstructions().text, markdownSupportSummary()]
     for (const project of this.listProjects()) {
       const text = this.store.settings.projectInstructions(project.id)
       if (text) {
