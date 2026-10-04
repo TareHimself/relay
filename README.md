@@ -15,7 +15,7 @@ ADMIN_PASSWORD='choose a long passphrase' pnpm start
 
 Open http://127.0.0.1:47821 and sign in as the admin (`ADMIN_HANDLE`, default `admin`). The example password from `.env.example` is refused, so pick your own. `ADMIN_PASSWORD` is only used to create the admin the first time; afterwards use `relay set-password`.
 
-Development: `pnpm dev` (server, watches `src`) and `pnpm dev:web` (Vite UI). Checks: `pnpm check` (typecheck, lint, tests, format).
+Development: `pnpm dev` (server, watches `src`) and `pnpm dev:web` (Vite UI). Checks: `pnpm check` (typecheck, lint, tests, format). Browser tests: `pnpm e2e` (Playwright; builds the app into `.e2e/`, starts it on port 47998 with a throwaway data folder, and drives it in Chromium).
 
 ### Docker
 

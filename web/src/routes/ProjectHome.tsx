@@ -47,7 +47,7 @@ export function ProjectHome() {
           ]}
         />
       </Group>
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing="md">
+      <SimpleGrid data-testid="doc-grid" cols={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing="md">
         {sorted.map((page) => (
           <DocCard key={page.id} projectId={project.id} page={page} />
         ))}

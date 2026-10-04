@@ -19,7 +19,8 @@
     "format:check": "prettier --check .",
     "db:generate": "drizzle-kit generate",
     "lint": "oxlint",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm format:check"
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm format:check",
+    "e2e": "node e2e/prepare.mjs && playwright test"
   },
   "dependencies": {
     "@hono/mcp": "^0.3.2",
@@ -33,6 +34,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.2",
     "drizzle-kit": "^0.31.11",

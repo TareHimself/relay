@@ -11,3 +11,6 @@ coverage/
 Thumbs.db
 .claude/
 .tmp-verify/
+.e2e/
+test-results/
+playwright-report/
