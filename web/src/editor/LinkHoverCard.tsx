@@ -86,14 +86,15 @@ export function LinkHoverCard({ view, navigate }: LinkHoverCardProps) {
       }, HIDE_DELAY_MS)
     }
     const onDocumentMove = (event: MouseEvent) => {
-      const open = shown.current
-      if (!open) return
-      const card = cardRef.current?.getBoundingClientRect()
+      const hovered = shown.current
+      if (!hovered) return
+      const cardRect = cardRef.current?.getBoundingClientRect()
       const box = {
-        left: Math.min(open.anchor.left, card?.left ?? open.anchor.left) - SAFE_PX,
-        right: Math.max(open.anchor.right, card?.right ?? open.anchor.right) + SAFE_PX,
-        top: Math.min(open.anchor.top, card?.top ?? open.anchor.top) - SAFE_PX,
-        bottom: Math.max(open.anchor.bottom, card?.bottom ?? open.anchor.bottom) + SAFE_PX,
+        left: Math.min(hovered.anchor.left, cardRect?.left ?? hovered.anchor.left) - SAFE_PX,
+        right: Math.max(hovered.anchor.right, cardRect?.right ?? hovered.anchor.right) + SAFE_PX,
+        top: Math.min(hovered.anchor.top, cardRect?.top ?? hovered.anchor.top) - SAFE_PX,
+        bottom:
+          Math.max(hovered.anchor.bottom, cardRect?.bottom ?? hovered.anchor.bottom) + SAFE_PX,
       }
       const inside =
         event.clientX >= box.left &&

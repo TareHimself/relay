@@ -31,6 +31,7 @@ import { headingShortcut } from '../../editor/headingShortcut'
 import { CellCommentBar } from '../../editor/CellCommentBar'
 import { LinkHoverCard } from '../../editor/LinkHoverCard'
 import { linkClicks } from '../../editor/linkClicks'
+import { linkKinds } from '../../editor/linkKinds'
 import { svgBlock } from '../../editor/svgBlock'
 import { SelectionBar } from '../../editor/SelectionBar'
 import { draftFromSelection } from '../../editor/selectionDraft'
@@ -133,6 +134,7 @@ export function DocView({ page, projectName }: DocViewProps) {
       codeBlockExitKeys,
       codeBlockCopy,
       svgBlock,
+      linkKinds,
       linkClicks((path) => void navigate(path)),
     ],
     [bridge, navigate],

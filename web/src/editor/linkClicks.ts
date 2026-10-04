@@ -1,7 +1,7 @@
 import { syntaxTree } from '@codemirror/language'
 import { EditorView, ViewPlugin } from '@codemirror/view'
 import type { MarkdownExtension } from '@latentic/live-markdown'
-import { normalizeLink } from './link'
+import { linkAt, normalizeLink } from './link'
 
 type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>['resolveInner']>
 
@@ -63,6 +63,16 @@ export function internalPath(href: string): string | null {
   return null
 }
 
+function trailingLinkLineEnd(view: EditorView, event: MouseEvent): number | null {
+  const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }, false)
+  const line = view.state.doc.lineAt(pos)
+  if (view.state.sliceDoc(line.to).trim() !== '') return null
+  const inline = linkAt(line.text, pos - line.from, pos - line.from)
+  if (inline) return inline.to === line.text.trimEnd().length ? line.to : null
+  const url = linkUrlAt(view, pos)
+  return url && line.text.trimEnd().replace(/>$/, '').endsWith(url) ? line.to : null
+}
+
 export function openHref(href: string, navigate: (path: string) => void) {
   const path = internalPath(href)
   if (path) navigate(path)
@@ -70,6 +80,8 @@ export function openHref(href: string, navigate: (path: string) => void) {
 }
 
 function hrefAt(view: EditorView, event: MouseEvent): string | null {
+  const target = event.target
+  if (!(target instanceof HTMLElement) || !target.closest('.cm-link')) return null
   const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
   const raw = pos === null ? null : linkUrlAt(view, pos)
   return raw ? normalizeLink(raw) : null
@@ -80,7 +92,16 @@ export function linkClicks(navigate: (path: string) => void): MarkdownExtension 
   const handler = EditorView.domEventHandlers({
     mousedown(event, view) {
       pressed = event.button === 0 ? hrefAt(view, event) : null
-      return false
+      const lineEnd = event.button === 0 && !pressed ? trailingLinkLineEnd(view, event) : null
+      if (lineEnd === null) return false
+      event.preventDefault()
+      view.dispatch({
+        changes: { from: lineEnd, to: view.state.doc.length, insert: '\n\n' },
+        selection: { anchor: lineEnd + 2 },
+        userEvent: 'input',
+      })
+      view.focus()
+      return true
     },
     click(event, view) {
       const href = pressed
