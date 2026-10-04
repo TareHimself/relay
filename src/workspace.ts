@@ -117,6 +117,31 @@ export class Workspace {
     return this.store.renameProject(id, name, this.access.actor)
   }
 
+  agentInstructions(): string {
+    const sections = [this.store.settings.agentInstructions().text]
+    for (const project of this.listProjects()) {
+      const text = this.store.settings.projectInstructions(project.id)
+      if (text) {
+        sections.push(
+          [`Rules for project "${project.name}" (${project.id}), these take priority:`, text].join(
+            '\n',
+          ),
+        )
+      }
+    }
+    return sections.join('\n\n')
+  }
+
+  projectInstructions(projectId: string): string {
+    this.access.project(projectId)
+    return this.store.settings.projectInstructions(projectId)
+  }
+
+  setProjectInstructions(projectId: string, text: string): string {
+    this.access.admin()
+    return this.store.settings.setProjectInstructions(projectId, text)
+  }
+
   setProjectDescription(id: string, description: string): Promise<Project> {
     this.access.write()
     this.access.project(id)

@@ -79,3 +79,8 @@ export const sessions = sqliteTable('sessions', {
   expiresAt: text('expires_at').notNull(),
   userAgent: text('user_agent').notNull(),
 })
+
+export const settings = sqliteTable('settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+})

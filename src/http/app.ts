@@ -19,6 +19,7 @@ import {
 } from '../shared/requests'
 import { searchQuery } from '../shared/search'
 import { tagsInput } from '../shared/tags'
+import { agentInstructionsInput, projectInstructionsInput } from '../shared/agentInstructions'
 import { tokenInput } from '../shared/tokens'
 import type { RelayStore } from '../store/relay-store'
 import { setCookie, deleteCookie, getCookie } from 'hono/cookie'
@@ -173,6 +174,20 @@ export function createApp(store: RelayStore) {
     return c.json(store.listProblems())
   })
 
+  api.get('/settings/agent-instructions', (c) => {
+    workspace(c).access.admin()
+    return c.json(store.settings.agentInstructions())
+  })
+  api.put('/settings/agent-instructions', async (c) => {
+    workspace(c).access.admin()
+    const { text } = agentInstructionsInput.parse(await c.req.json())
+    return c.json(store.settings.setAgentInstructions(text))
+  })
+  api.delete('/settings/agent-instructions', (c) => {
+    workspace(c).access.admin()
+    return c.json(store.settings.resetAgentInstructions())
+  })
+
   api.get('/tokens', (c) => {
     workspace(c).access.admin()
     return c.json(store.tokens.list())
@@ -199,6 +214,13 @@ export function createApp(store: RelayStore) {
   api.put('/projects/:projectId/description', async (c) => {
     const { description } = projectDescriptionInput.parse(await c.req.json())
     return c.json(await workspace(c).setProjectDescription(c.req.param('projectId'), description))
+  })
+  api.get('/projects/:projectId/instructions', (c) =>
+    c.json({ text: workspace(c).projectInstructions(c.req.param('projectId')) }),
+  )
+  api.put('/projects/:projectId/instructions', async (c) => {
+    const { text } = projectInstructionsInput.parse(await c.req.json())
+    return c.json({ text: workspace(c).setProjectInstructions(c.req.param('projectId'), text) })
   })
   api.get('/projects/:projectId/pages', (c) =>
     c.json(workspace(c).listPages(c.req.param('projectId'))),

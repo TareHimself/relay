@@ -15,6 +15,7 @@ const EXPECTED_TOOLS = [
   'list_pages',
   'list_projects',
   'list_tags',
+  'markdown_support',
   'open_threads',
   'poll_events',
   'read_page',
@@ -184,7 +185,7 @@ describe('MCP endpoint', () => {
     const created = await agent.call('create_page', {
       projectId: project.id,
       title: 'Agent notes',
-      markdown: 'written by an agent',
+      body: 'written by an agent',
       includeBody: true,
     })
     expect(created.data.body).toContain('written by an agent')
@@ -209,7 +210,7 @@ describe('MCP endpoint', () => {
     const created = await agent.call('create_page', {
       projectId: project.id,
       title: 'Lean',
-      markdown: 'short',
+      body: 'short',
     })
     expect(Object.keys(created.data).sort()).toEqual([
       'id',
@@ -275,7 +276,7 @@ describe('MCP endpoint', () => {
     const viaCreate = await agent.call('create_page', {
       projectId: project.id,
       title: 'Sneaky',
-      markdown: sneaky,
+      body: sneaky,
     })
     expect(viaCreate.isError).toBe(true)
     expect(viaCreate.data.message).toContain('frontmatter')

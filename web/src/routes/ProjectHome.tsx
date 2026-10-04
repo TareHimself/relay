@@ -4,6 +4,7 @@ import { useParams } from 'react-router'
 import { useProjectPages, useProjects } from '../api/queries'
 import { DocCard, NewDocCard } from '../components/home/DocCard'
 import { ProjectDescription } from '../components/home/ProjectDescription'
+import { ProjectInstructionsSection } from '../components/settings/ProjectInstructionsSection'
 import { NewDocDialog } from '../components/layout/NewDocDialog'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 
@@ -24,6 +25,7 @@ export function ProjectHome() {
       <Stack gap={4}>
         <Title order={1}>{project.name}</Title>
         <ProjectDescription project={project} />
+        <ProjectInstructionsSection projectId={project.id} />
       </Stack>
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing="md">
         {recent.map((page) => (

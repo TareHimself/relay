@@ -9,6 +9,7 @@ import YAML from 'yaml'
 import * as schema from '../db/schema'
 import { AccountService } from '../auth/accounts'
 import { TokenService } from '../auth/tokens'
+import { SettingsService } from './settings'
 import { eventCursorOf } from '../core/cursor'
 import { applyEdits, revisionOf, type TextEdit } from '../core/edits'
 import { StoreError } from '../core/errors'
@@ -143,6 +144,7 @@ export class RelayStore {
   private readonly repo: Git
   readonly tokens: TokenService
   readonly accounts: AccountService
+  readonly settings: SettingsService
   readonly threads: ThreadService
   readonly search: SearchIndex
   private readonly now: () => number
@@ -166,6 +168,7 @@ export class RelayStore {
     migrate(this.orm, { migrationsFolder })
     this.tokens = new TokenService(this.orm)
     this.accounts = new AccountService(this.orm)
+    this.settings = new SettingsService(this.orm)
     this.search = new SearchIndex(this.db)
     this.threads = new ThreadService({
       orm: this.orm,

@@ -12,6 +12,7 @@ import {
   threadInput,
 } from '../shared/requests'
 import { threadStatusSchema } from '../shared/threads'
+import { MARKDOWN_SUPPORT } from '../shared/markdownSupport'
 import { MARK_END, MARK_START } from '../store/search'
 import { pageMetadata, type Workspace } from '../workspace'
 
@@ -42,7 +43,10 @@ function pageResult(page: Page, withBody: boolean | undefined) {
 }
 
 export function createMcpServer(workspace: Workspace): McpServer {
-  const server = new McpServer({ name: 'relay', version: '0.1.0' })
+  const server = new McpServer(
+    { name: 'relay', version: '0.1.0' },
+    { instructions: workspace.agentInstructions() },
+  )
 
   server.registerTool(
     'whoami',
@@ -51,6 +55,16 @@ export function createMcpServer(workspace: Workspace): McpServer {
       description: 'Return the name, scope and project restriction of the token in use.',
     },
     () => respond(() => workspace.whoami()),
+  )
+
+  server.registerTool(
+    'markdown_support',
+    {
+      title: 'Markdown support',
+      description:
+        'List the markdown features pages can use (tables, mermaid, math, images and more) and what is not supported. Call this before asking whether something renders.',
+    },
+    () => result(MARKDOWN_SUPPORT),
   )
 
   server.registerTool(
@@ -131,17 +145,14 @@ export function createMcpServer(workspace: Workspace): McpServer {
       inputSchema: {
         projectId: z.string(),
         title: z.string().min(1),
-        markdown: z
-          .string()
-          .optional()
-          .describe('The page body as plain markdown, no frontmatter.'),
+        body: z.string().optional().describe('The page body as plain markdown, no frontmatter.'),
         tags: z.array(z.string()).optional(),
         includeBody: includeBodyFlag,
       },
     },
-    ({ projectId, title, markdown, tags, includeBody: withBody }) =>
+    ({ projectId, title, body, tags, includeBody: withBody }) =>
       respond(async () =>
-        pageResult(await workspace.createPage(projectId, title, markdown ?? '', tags), withBody),
+        pageResult(await workspace.createPage(projectId, title, body ?? '', tags), withBody),
       ),
   )
 

@@ -12,6 +12,7 @@ import { searchHitSchema } from '@shared/search'
 import { threadSchema, type Thread } from '@shared/threads'
 import { personSchema, sessionRecordSchema, whoamiSchema } from '@shared/accounts'
 import { createdTokenSchema, tokenRecordSchema, type TokenInput } from '@shared/tokens'
+import { agentInstructionsSchema, projectInstructionsSchema } from '@shared/agentInstructions'
 import { http } from './http'
 
 const SAFETY_POLL_MS = 30_000
@@ -22,6 +23,8 @@ export const keys = {
   whoami: ['whoami'] as const,
   people: ['people'] as const,
   sessions: ['sessions'] as const,
+  agentInstructions: ['agent-instructions'] as const,
+  projectInstructions: (projectId: string) => ['projects', projectId, 'instructions'] as const,
   projectPages: (projectId: string) => ['projects', projectId, 'pages'] as const,
   page: (pageId: string) => ['pages', pageId] as const,
   threads: (pageId: string) => ['pages', pageId, 'threads'] as const,
@@ -395,5 +398,39 @@ export function useDeletePage(projectId: string) {
       void queryClient.invalidateQueries({ queryKey: keys.projectPages(projectId) })
       void queryClient.invalidateQueries({ queryKey: ['search'] })
     },
+  })
+}
+
+export function useAgentInstructions() {
+  return useQuery({
+    queryKey: keys.agentInstructions,
+    queryFn: () => http.get('/settings/agent-instructions', agentInstructionsSchema),
+  })
+}
+
+export function useSaveAgentInstructions() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (text: string | null) =>
+      text === null
+        ? http.delete('/settings/agent-instructions', agentInstructionsSchema)
+        : http.put('/settings/agent-instructions', agentInstructionsSchema, { text }),
+    onSuccess: (data) => queryClient.setQueryData(keys.agentInstructions, data),
+  })
+}
+
+export function useProjectInstructions(projectId: string) {
+  return useQuery({
+    queryKey: keys.projectInstructions(projectId),
+    queryFn: () => http.get(`/projects/${projectId}/instructions`, projectInstructionsSchema),
+  })
+}
+
+export function useSaveProjectInstructions(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (text: string) =>
+      http.put(`/projects/${projectId}/instructions`, projectInstructionsSchema, { text }),
+    onSuccess: (data) => queryClient.setQueryData(keys.projectInstructions(projectId), data),
   })
 }

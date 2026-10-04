@@ -80,7 +80,7 @@ A page file is YAML frontmatter (`id`, `title`, `tags`) followed by the markdown
 
 ## Agents (MCP)
 
-Create an API token in the UI (Settings), then point an MCP client at `http://<host>:<port>/mcp` with the header `Authorization: Bearer rly_...`. Tokens are read or write scoped and can be limited to one project. Tools: `whoami`, `list_projects`, `create_project`, `rename_project`, `set_project_description`, `list_pages`, `read_page`, `create_page`, `edit_page`, `rename_page`, `set_tags`, `list_tags`, `search`, `history`, `diff`, `read_version`, `restore_version`, `delete_page`, `read_threads`, `open_threads`, `comment`, `reply`, `resolve`, `poll_events`.
+Create an API token in the UI (Settings), then point an MCP client at `http://<host>:<port>/mcp` with the header `Authorization: Bearer rly_...`. Tokens are read or write scoped and can be limited to one project. Tools: `whoami`, `markdown_support`, `list_projects`, `create_project`, `rename_project`, `set_project_description`, `list_pages`, `read_page`, `create_page`, `edit_page`, `rename_page`, `set_tags`, `list_tags`, `search`, `history`, `diff`, `read_version`, `restore_version`, `delete_page`, `read_threads`, `open_threads`, `comment`, `reply`, `resolve`, `poll_events`.
 
 The same operations are available over REST under `/api` (Bearer token or session cookie).
 
