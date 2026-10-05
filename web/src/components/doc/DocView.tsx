@@ -378,6 +378,9 @@ export function DocView({ page, projectName }: DocViewProps) {
         onToggleWidth={togglePageWidth}
         onOpenVersions={() => setVersionsOpen(true)}
         onRename={() => setRenameOpen(true)}
+        onExport={() => {
+          void sync.ensureSaved().then(() => window.location.assign(`/api/pages/${page.id}/export`))
+        }}
         onDelete={() => setDeleteOpen(true)}
         status={sync.status}
         resolvedCount={resolvedCount}

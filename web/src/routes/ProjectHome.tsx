@@ -1,4 +1,5 @@
-import { Group, SegmentedControl, SimpleGrid, Stack, Title } from '@mantine/core'
+import { Button, Group, SegmentedControl, SimpleGrid, Stack, Text, Title } from '@mantine/core'
+import { IconDownload } from '@tabler/icons-react'
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router'
 import { useProjectPages, useProjects } from '../api/queries'
@@ -14,6 +15,8 @@ export function ProjectHome() {
   const project = useProjects().data?.find((p) => p.id === projectId)
   const pages = useProjectPages(projectId).data
   const [creating, setCreating] = useState(false)
+  const [selecting, setSelecting] = useState(false)
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   useDocumentTitle(project?.name)
   const sort = usePrefsStore((state) => state.homeSort)
   const setSort = usePrefsStore((state) => state.setHomeSort)
@@ -28,6 +31,19 @@ export function ProjectHome() {
   )
   if (!project) return null
 
+  const exportUrl = (ids: readonly string[]) =>
+    `/api/projects/${project.id}/export${ids.length ? `?ids=${ids.join(',')}` : ''}`
+  const stopSelecting = () => {
+    setSelecting(false)
+    setSelected(new Set())
+  }
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+
   return (
     <Stack gap="lg" maw={1152} mx="auto" pt="md">
       <Stack gap={4}>
@@ -35,7 +51,48 @@ export function ProjectHome() {
         <ProjectDescription project={project} />
         <ProjectInstructionsSection projectId={project.id} />
       </Stack>
-      <Group justify="flex-end">
+      <Group justify="space-between">
+        {selecting ? (
+          <Group gap="xs">
+            <Text size="sm" c="dimmed">
+              {selected.size} selected
+            </Text>
+            <Button
+              size="compact-sm"
+              variant="subtle"
+              onClick={() =>
+                setSelected(
+                  selected.size === sorted.length ? new Set() : new Set(sorted.map((p) => p.id)),
+                )
+              }
+            >
+              {selected.size === sorted.length ? 'Select none' : 'Select all'}
+            </Button>
+            <Button
+              size="compact-sm"
+              component="a"
+              href={exportUrl([...selected])}
+              leftSection={<IconDownload size={14} />}
+              disabled={selected.size === 0}
+              onClick={() => window.setTimeout(stopSelecting, 300)}
+            >
+              Download .zip
+            </Button>
+            <Button size="compact-sm" variant="default" onClick={stopSelecting}>
+              Cancel
+            </Button>
+          </Group>
+        ) : (
+          <Button
+            size="compact-sm"
+            variant="default"
+            leftSection={<IconDownload size={14} />}
+            onClick={() => setSelecting(true)}
+            disabled={sorted.length === 0}
+          >
+            Export
+          </Button>
+        )}
         <SegmentedControl
           size="xs"
           radius="md"
@@ -49,7 +106,16 @@ export function ProjectHome() {
       </Group>
       <SimpleGrid data-testid="doc-grid" cols={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing="md">
         {sorted.map((page) => (
-          <DocCard key={page.id} projectId={project.id} page={page} />
+          <DocCard
+            key={page.id}
+            projectId={project.id}
+            page={page}
+            selection={
+              selecting
+                ? { selected: selected.has(page.id), onToggle: () => toggle(page.id) }
+                : undefined
+            }
+          />
         ))}
         <NewDocCard onClick={() => setCreating(true)} />
       </SimpleGrid>

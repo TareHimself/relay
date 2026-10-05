@@ -1,5 +1,5 @@
 import { css } from '@linaria/core'
-import { Badge, Group, Paper, Stack, Text } from '@mantine/core'
+import { Badge, Checkbox, Group, Paper, Stack, Text } from '@mantine/core'
 import { IconFileText, IconPlus } from '@tabler/icons-react'
 import { Link } from 'react-router'
 import type { PageSummary } from '@shared/pages'
@@ -19,6 +19,10 @@ const card = css`
   &:hover {
     border-color: var(--mantine-color-gray-5);
     box-shadow: var(--mantine-shadow-sm);
+  }
+
+  &[data-selected] {
+    border-color: var(--mantine-primary-color-filled);
   }
 `
 const newCard = css`
@@ -43,9 +47,10 @@ const newCard = css`
 interface DocCardProps {
   projectId: string
   page: PageSummary
+  selection?: { selected: boolean; onToggle: () => void } | undefined
 }
 
-export function DocCard({ projectId, page }: DocCardProps) {
+export function DocCard({ projectId, page, selection }: DocCardProps) {
   return (
     <Paper
       component={Link}
@@ -54,10 +59,27 @@ export function DocCard({ projectId, page }: DocCardProps) {
       radius="md"
       p="md"
       className={card}
+      data-selected={selection?.selected || undefined}
+      onClick={(event: React.MouseEvent) => {
+        if (!selection) return
+        event.preventDefault()
+        selection.onToggle()
+      }}
     >
       <Stack gap={8} h="100%">
         <Group gap={6} wrap="nowrap">
-          <IconFileText size={16} opacity={0.6} />
+          {selection ? (
+            <Checkbox
+              size="xs"
+              radius="sm"
+              checked={selection.selected}
+              readOnly
+              tabIndex={-1}
+              aria-label={`Select ${page.title}`}
+            />
+          ) : (
+            <IconFileText size={16} opacity={0.6} />
+          )}
           <Text fw={600} lineClamp={1}>
             {page.title}
           </Text>

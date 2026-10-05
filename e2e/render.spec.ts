@@ -32,7 +32,9 @@ test('table cell text can be commented on', async ({ page }) => {
   await expect(cell).toHaveAttribute('contenteditable', 'plaintext-only')
   await page.keyboard.press('Home')
   await page.keyboard.press('Shift+End')
-  await expect(page.getByRole('button', { name: 'Comment' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Comment' }).filter({ visible: true })).toHaveCount(
+    1,
+  )
 })
 
 test('table hover buttons can be reached and clicked', async ({ page }) => {

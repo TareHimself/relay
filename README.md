@@ -84,6 +84,8 @@ Create an API token in the UI (Settings), then point an MCP client at `http://<h
 
 The same operations are available over REST under `/api` (Bearer token or session cookie).
 
+Export: a page downloads as `.md` from its menu (`GET /api/pages/:id/export`), and a project exports as a `.zip` of `.md` files, either all pages or a selection (`GET /api/projects/:id/export?ids=a,b`).
+
 ## CLI
 
 `relay <command>` (`node dist/index.js <command>`): `serve` (default), `set-password`, `set-name`, `admin`, `watch`, `tidy-history`, `adopt-local`, `help`.

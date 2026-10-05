@@ -11,6 +11,7 @@ import {
 import {
   IconArrowsHorizontal,
   IconDots,
+  IconDownload,
   IconHistory,
   IconPencil,
   IconTrash,
@@ -53,6 +54,7 @@ interface DocActionsProps {
   onToggleWidth: () => void
   onOpenVersions: () => void
   onRename: () => void
+  onExport: () => void
   onDelete: () => void
 }
 
@@ -108,6 +110,9 @@ export function DocActions(props: DocActionsProps) {
         <Menu.Dropdown>
           <Menu.Item leftSection={<IconPencil size={14} />} onClick={props.onRename}>
             Rename doc
+          </Menu.Item>
+          <Menu.Item leftSection={<IconDownload size={14} />} onClick={props.onExport}>
+            Download .md
           </Menu.Item>
           <Menu.Item color="red" leftSection={<IconTrash size={14} />} onClick={props.onDelete}>
             Delete doc

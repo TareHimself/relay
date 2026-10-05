@@ -1,6 +1,8 @@
 import type { Access } from './auth/access'
 import type { Person, SessionRecord, Whoami } from './shared/accounts'
 import { StoreError } from './core/errors'
+import { exportFileName, exportMarkdown } from './core/export'
+import { buildZip } from './core/zip'
 import { markdownSupportSummary } from './shared/markdownSupport'
 import { outlineOf } from './core/sections'
 import type {
@@ -187,6 +189,39 @@ export class Workspace {
     const page = publicPage(stored)
     const outline = outlineOf(page.body)
     return options.includeBody === false ? { ...pageMetadata(page), outline } : { ...page, outline }
+  }
+
+  async exportPage(id: string): Promise<{ filename: string; markdown: string }> {
+    this.access.page(id)
+    const page = await this.store.readPage(id)
+    return { filename: exportFileName(page.title), markdown: exportMarkdown(page.title, page.body) }
+  }
+
+  async exportProject(
+    projectId: string,
+    pageIds?: readonly string[],
+  ): Promise<{ filename: string; zip: Buffer }> {
+    this.access.project(projectId)
+    const project = this.store.listProjects().find((entry) => entry.id === projectId)
+    if (!project) throw new StoreError('not_found', 'Project not found')
+    const summaries = this.store.listPages(projectId)
+    const wanted = pageIds ? new Set(pageIds) : null
+    const chosen = wanted ? summaries.filter((page) => wanted.has(page.id)) : summaries
+    if (chosen.length === 0) throw new StoreError('invalid', 'No pages to export')
+    const taken = new Set<string>()
+    const entries = []
+    for (const summary of chosen) {
+      const page = await this.store.readPage(summary.id)
+      entries.push({
+        name: exportFileName(page.title, taken),
+        data: Buffer.from(exportMarkdown(page.title, page.body), 'utf8'),
+        modified: new Date(page.updatedAt || Date.now()),
+      })
+    }
+    return {
+      filename: `${exportFileName(project.name).replace(/\.md$/, '')}.zip`,
+      zip: buildZip(entries),
+    }
   }
 
   async editPage(id: string, change: PageChange, ifRevision?: string): Promise<Page> {

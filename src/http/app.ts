@@ -222,6 +222,14 @@ export function createApp(store: RelayStore) {
     const { text } = projectInstructionsInput.parse(await c.req.json())
     return c.json({ text: workspace(c).setProjectInstructions(c.req.param('projectId'), text) })
   })
+  api.get('/projects/:projectId/export', async (c) => {
+    const ids = c.req.query('ids')?.split(',').filter(Boolean)
+    const { filename, zip } = await workspace(c).exportProject(c.req.param('projectId'), ids)
+    return c.body(new Uint8Array(zip), 200, {
+      'content-type': 'application/zip',
+      'content-disposition': `attachment; filename="${filename}"`,
+    })
+  })
   api.get('/projects/:projectId/pages', (c) =>
     c.json(workspace(c).listPages(c.req.param('projectId'))),
   )
@@ -246,6 +254,13 @@ export function createApp(store: RelayStore) {
       }),
     ),
   )
+  api.get('/pages/:pageId/export', async (c) => {
+    const { filename, markdown } = await workspace(c).exportPage(c.req.param('pageId'))
+    return c.body(markdown, 200, {
+      'content-type': 'text/markdown; charset=utf-8',
+      'content-disposition': `attachment; filename="${filename}"`,
+    })
+  })
   api.patch('/pages/:pageId', async (c) => {
     const { ifRevision, ...change } = editInput.parse(await c.req.json())
     return c.json(await workspace(c).editPage(c.req.param('pageId'), change, ifRevision))
