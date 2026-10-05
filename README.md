@@ -28,13 +28,16 @@ The port is published on `127.0.0.1` only. Put a TLS-terminating reverse proxy i
 
 Relay's data (`DATA_DIR` inside the container) lives in the named Docker volume `relay_relay-data`, not a bind mount: git runs about 100x faster on a volume than on a Windows bind mount. The optional Tailscale sidecar below keeps its state in `./data/tailscale`.
 
-Back up and restore the volume (stop Relay before restoring):
+Back up and restore (backups land in `./data/backups`; stop Relay before restoring):
 
 ```sh
-docker run --rm -v relay_relay-data:/data:ro -v "$PWD:/backup" alpine tar -czf /backup/relay-backup.tgz -C /data .
+docker compose --profile tools run --rm backup
 docker compose stop relay
-docker run --rm -v relay_relay-data:/data -v "$PWD:/backup" alpine sh -c "cd /data && tar -xzf /backup/relay-backup.tgz"
+docker compose --profile tools run --rm -e FILE=relay-20260101-120000.tgz restore
+docker compose up -d relay
 ```
+
+For a fully consistent snapshot, stop Relay before the backup too (the database is SQLite).
 
 #### Tailscale instead of a public port
 
