@@ -195,10 +195,23 @@ function useThreadMutation<TInput, TResult>(
   pageId: string,
   send: (input: TInput) => Promise<TResult>,
   applyResult?: (result: TResult, threads: Thread[]) => Thread[],
+  optimistic?: (input: TInput, threads: Thread[]) => Thread[],
 ) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: send,
+    onMutate: async (input: TInput) => {
+      if (!optimistic) return undefined
+      await queryClient.cancelQueries({ queryKey: keys.threads(pageId) })
+      const previous = queryClient.getQueryData<Thread[]>(keys.threads(pageId))
+      queryClient.setQueryData<Thread[]>(keys.threads(pageId), (current = []) =>
+        optimistic(input, current),
+      )
+      return { previous }
+    },
+    onError: (_error, _input, context) => {
+      if (context?.previous) queryClient.setQueryData(keys.threads(pageId), context.previous)
+    },
     onSuccess: (result) => {
       if (applyResult) {
         queryClient.setQueryData<Thread[]>(keys.threads(pageId), (current = []) =>
@@ -208,6 +221,11 @@ function useThreadMutation<TInput, TResult>(
       void queryClient.invalidateQueries({ queryKey: keys.threads(pageId) })
     },
   })
+}
+
+function withStatus(status: Thread['status']) {
+  return (threadId: string, threads: Thread[]) =>
+    threads.map((thread) => (thread.id === threadId ? { ...thread, status } : thread))
 }
 
 function upsertThread(thread: Thread, threads: Thread[]): Thread[] {
@@ -258,6 +276,7 @@ export function useReopenThread(pageId: string) {
     pageId,
     (threadId: string) => http.post(`/threads/${threadId}/reopen`, threadSchema),
     upsertThread,
+    withStatus('open'),
   )
 }
 
@@ -266,6 +285,7 @@ export function useResolveThread(pageId: string) {
     pageId,
     (threadId: string) => http.post(`/threads/${threadId}/resolve`, threadSchema),
     upsertThread,
+    withStatus('resolved'),
   )
 }
 
