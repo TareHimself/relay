@@ -185,6 +185,7 @@ describe('MCP endpoint', () => {
       arguments: { projectId: project.id, title: 'Stale client', markdown: 'dropped' },
     })
     expect(reply.result.isError).toBe(true)
+    expect(reply.result.content[0].text).toContain('renamed from "markdown"')
     expect((await agent.call('list_pages', { projectId: project.id })).data).toHaveLength(1)
   })
 

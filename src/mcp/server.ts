@@ -146,7 +146,10 @@ export function createMcpServer(workspace: Workspace): McpServer {
         projectId: z.string(),
         title: z.string().min(1),
         body: z
-          .string()
+          .string({
+            error:
+              'body is required. It was renamed from "markdown": if your tool list still says markdown, it is outdated, so reload the relay MCP tools or start a new session.',
+          })
           .describe('The page body as plain markdown, no frontmatter. Use "" for an empty page.'),
         tags: z.array(z.string()).optional(),
         includeBody: includeBodyFlag,
