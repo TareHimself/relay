@@ -5,7 +5,7 @@ services:
     ports:
       - '${BIND:-127.0.0.1}:47821:47821'
     volumes:
-      - ./data/relay:/data
+      - relay-data:/data
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env to create the admin on first start}
       ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
@@ -26,3 +26,7 @@ services:
     volumes:
       - ./data/tailscale:/var/lib/tailscale
       - ./tailscale/serve.json:/config/serve.json:ro
+
+volumes:
+  relay-data:
+    name: relay_relay-data

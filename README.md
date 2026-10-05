@@ -26,7 +26,15 @@ docker compose up -d --build
 
 The port is published on `127.0.0.1` only. Put a TLS-terminating reverse proxy in front for anything beyond your own machine, and set `TRUST_PROXY=1` when it sets `X-Forwarded-For` / `X-Forwarded-Proto`. Set `BIND=0.0.0.0` only if you understand the exposure.
 
-Everything lives under one host folder, `./data`: Relay's own data is at `./data/relay` (`DATA_DIR` inside the container), and the optional Tailscale sidecar below keeps its state at `./data/tailscale`, so a single folder covers the whole stack for backup or migration.
+Relay's data (`DATA_DIR` inside the container) lives in the named Docker volume `relay_relay-data`, not a bind mount: git runs about 100x faster on a volume than on a Windows bind mount. The optional Tailscale sidecar below keeps its state in `./data/tailscale`.
+
+Back up and restore the volume (stop Relay before restoring):
+
+```sh
+docker run --rm -v relay_relay-data:/data:ro -v "$PWD:/backup" alpine tar -czf /backup/relay-backup.tgz -C /data .
+docker compose stop relay
+docker run --rm -v relay_relay-data:/data -v "$PWD:/backup" alpine sh -c "cd /data && tar -xzf /backup/relay-backup.tgz"
+```
 
 #### Tailscale instead of a public port
 
@@ -64,7 +72,7 @@ Without `TS_AUTHKEY`, the container falls back to an interactive login link in `
 - `projects/` — the git repository: `<project>/project.yaml`, `<project>/<slug>.md` for pages, `<slug>.threads.json` for comments.
 - `db/` — `state.db` (SQLite, not in git): the admin account, sessions, API tokens and the event log.
 
-Keeping `db/` outside the git repo means it can never end up in a commit, by construction, rather than by relying on a `.gitignore` entry. **Back up the whole `DATA_DIR` folder** (both subfolders).
+Keeping `db/` outside the git repo means it can never end up in a commit, by construction, rather than by relying on a `.gitignore` entry. **Back up the whole `DATA_DIR`** (both subfolders; with Docker, the volume).
 
 An install from before this split (a flat `DATA_DIR` with the git repo and `state.db` as direct siblings) is migrated automatically and non-destructively the first time it starts under the new layout: everything moves into `projects/` except `state.db*`, which moves into `db/`.
 
