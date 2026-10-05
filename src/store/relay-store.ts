@@ -304,15 +304,21 @@ export class RelayStore {
     await this.finishOperation(operation, { verb: 'rename' })
   }
 
-  private async finishOperation(operation: Operation, options: CommitOptions = {}): Promise<void> {
-    const existingCommit = await this.repo.run([
-      'log',
-      '--all',
-      '-1',
-      '--format=%H',
-      '--fixed-strings',
-      `--grep=Operation-ID: ${operation.id}`,
-    ])
+  private async finishOperation(
+    operation: Operation,
+    options: CommitOptions = {},
+    recovering = false,
+  ): Promise<void> {
+    const existingCommit = recovering
+      ? await this.repo.run([
+          'log',
+          '--all',
+          '-1',
+          '--format=%H',
+          '--fixed-strings',
+          `--grep=Operation-ID: ${operation.id}`,
+        ])
+      : ''
     const events = JSON.parse(operation.event) as StoreEvent[]
     if (!existingCommit && operation.renameFrom) {
       await this.moveFiles(operation.renameFrom, operation)
@@ -492,7 +498,7 @@ export class RelayStore {
       .from(schema.operations)
       .where(eq(schema.operations.status, 'pending'))
       .all()
-    for (const operation of pending) await this.finishOperation(operation)
+    for (const operation of pending) await this.finishOperation(operation, {}, true)
   }
 
   private async rebuildIndex(): Promise<void> {
