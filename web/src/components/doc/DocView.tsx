@@ -35,6 +35,8 @@ import { linkKinds } from '../../editor/linkKinds'
 import { svgBlock } from '../../editor/svgBlock'
 import { SelectionBar } from '../../editor/SelectionBar'
 import { draftFromSelection } from '../../editor/selectionDraft'
+import { tableInserters } from '../../editor/tableInserters'
+import { DiagramLightbox } from './DiagramLightbox'
 import { useCommentLayout } from '../../editor/useCommentLayout'
 import { noWritingAssistant } from '../../editor/writingAssistants'
 import { useDocSync } from '../../editor/useDocSync'
@@ -139,6 +141,7 @@ export function DocView({ page, projectName }: DocViewProps) {
     ],
     [bridge, navigate],
   )
+      tableInserters,
   const wide = useMediaQuery('(min-width: 62em)') ?? true
   const columns = useRef<HTMLDivElement>(null)
 

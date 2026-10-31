@@ -19,7 +19,7 @@ test('svg fences, data-uri images and mermaid render', async ({ page }) => {
   const { project, pages } = await seed(page, [{ title: 'Render', body }])
   await openDoc(page, project.id, pages[0]!.id)
   await expect(page.locator('.relay-svg-block img')).toBeVisible()
-  await expect(page.locator('.cm-mermaid-block svg')).toBeVisible()
+  await expect(page.locator('.cm-mermaid-block > svg')).toBeVisible()
   await expect(page.locator('img[src^="data:image/svg+xml"]').nth(1)).toBeVisible()
 })
 
@@ -46,8 +46,19 @@ test('table hover buttons can be reached and clicked', async ({ page }) => {
   const inserter = page.getByLabel('Insert row below')
   await expect(inserter).toBeVisible()
   const target = (await inserter.boundingBox())!
-  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 12 })
+  await page.mouse.move(target.x + target.width / 2, box.y + 2, { steps: 6 })
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 6 })
   await expect(inserter).toBeVisible()
   await inserter.click()
   await expect(page.locator('tbody tr')).toHaveCount(2)
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 })
+  const column = page.getByLabel('Insert column right')
+  await expect(column).toBeVisible()
+  const above = (await column.boundingBox())!
+  await page.mouse.move(above.x - above.width, above.y + above.height / 2, { steps: 6 })
+  await page.mouse.move(above.x + above.width / 2, above.y + above.height / 2, { steps: 6 })
+  await expect(column).toBeVisible()
+  await column.click()
+  await expect(page.locator('thead th')).toHaveCount(3)
 })
