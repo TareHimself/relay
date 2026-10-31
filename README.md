@@ -28,16 +28,22 @@ The port is published on `127.0.0.1` only. Put a TLS-terminating reverse proxy i
 
 Relay's data (`DATA_DIR` inside the container) lives in the named Docker volume `relay_relay-data`, not a bind mount: git runs about 100x faster on a volume than on a Windows bind mount. The optional Tailscale sidecar below keeps its state in `./data/tailscale`.
 
-Back up and restore (backups land in `./data/backups`; stop Relay before restoring):
+#### Backup and restore
+
+A backup is one `.tgz` holding the whole instance: every project, page, version, comment thread, token and account. Download one from **Settings, Backup** while Relay runs, or set `BACKUP_EVERY=1d` (and optionally `BACKUP_KEEP=14`) in `.env` to write one on a timer into `./data/backups`. Keep backups private: they contain password and token hashes.
+
+Move to a new machine:
 
 ```sh
-docker compose --profile tools run --rm backup
-docker compose stop relay
-docker compose --profile tools run --rm -e FILE=relay-20260101-120000.tgz restore
-docker compose up -d relay
+git clone https://github.com/TareHimself/relay.git && cd relay
+cp /path/to/old/.env .                      # add RESTORE_FROM=/data/backups/relay-20260101-120000.tgz
+cp /path/to/relay-20260101-120000.tgz data/backups/
+docker compose up -d
 ```
 
-For a fully consistent snapshot, stop Relay before the backup too (the database is SQLite).
+`RESTORE_FROM` only acts while the data directory is empty, so it can stay in `.env`. Tokens survive, so MCP configs keep working, and the restored admin password applies (`ADMIN_PASSWORD` is only used when no admin exists). If `docker compose ps` shows the container restarting, the file could not be read: `docker compose logs relay` says why.
+
+With the server stopped, the CLI does the same: `relay backup [file.tgz]` and `relay restore <file.tgz> [--replace]` (`--replace` moves the existing data to `replaced-<timestamp>/` inside the data directory first). In Docker: `docker compose stop relay`, then `docker compose run --rm relay relay backup /data/backups/manual.tgz`.
 
 #### Tailscale instead of a public port
 

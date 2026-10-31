@@ -3,6 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './http/app'
+import { parseInterval, restoreIfFresh, scheduleBackups } from './store/backup'
 import { RelayStore } from './store/relay-store'
 
 const EXAMPLE_PASSWORD = 'change-me-please'
@@ -28,7 +29,10 @@ export async function bootstrapAdminFromEnv(store: RelayStore, env: AdminEnv): P
 }
 
 export async function startServer(env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  const store = await RelayStore.open(env.DATA_DIR ?? './data', { publicUrl: env.PUBLIC_URL })
+  const dataDir = env.DATA_DIR ?? './data'
+  const every = env.BACKUP_EVERY ? parseInterval(env.BACKUP_EVERY) : null
+  await restoreIfFresh(env.RESTORE_FROM, dataDir, (line) => console.log(line))
+  const store = await RelayStore.open(dataDir, { publicUrl: env.PUBLIC_URL })
   const created = await bootstrapAdminFromEnv(store, env)
   const admin = store.accounts.admin()
   if (!admin) {
@@ -48,7 +52,17 @@ export async function startServer(env: NodeJS.ProcessEnv = process.env): Promise
   const server = serve({ fetch: app.fetch, port, hostname })
   console.log(`Relay listening on http://${hostname}:${port}`)
   console.log(`Admin: ${admin.handle}${created ? ' (created from ADMIN_PASSWORD)' : ''}`)
+  const backups = every
+    ? scheduleBackups(store, {
+        dir: resolve(dataDir, 'backups'),
+        every,
+        keep: Number(env.BACKUP_KEEP ?? 14),
+        log: (line) => console.log(line),
+      })
+    : null
+  if (backups) console.log(`Backups every ${env.BACKUP_EVERY} to ${resolve(dataDir, 'backups')}`)
   const shutdown = () => {
+    backups?.stop()
     server.close()
     store.close()
   }

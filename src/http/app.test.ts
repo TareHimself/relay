@@ -1,5 +1,6 @@
+import { gunzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it } from 'vitest'
-import { adminClient, cleanupStores, json, tempStore } from '../test-support'
+import { adminClient, cleanupStores, client, json, tempStore } from '../test-support'
 
 afterEach(cleanupStores)
 
@@ -35,5 +36,33 @@ describe('thread routes', () => {
     const resolved = await api.send('POST', `/api/threads/${thread.id}/resolve`)
     expect((await json<{ status: string }>(resolved)).status).toBe('resolved')
     expect((await api.send('POST', '/api/threads/unknown/resolve')).status).toBe(404)
+  })
+})
+
+describe('backup route', () => {
+  it('streams a backup archive to the admin only, one at a time', async () => {
+    const store = await tempStore()
+    const admin = await adminClient(store)
+    const project = await json<{ id: string }>(
+      await admin.send('POST', '/api/projects', { name: 'Alpha' }),
+    )
+    await admin.send('POST', `/api/projects/${project.id}/pages`, { title: 'Plan', body: 'x' })
+    const token = store.tokens.create({ name: 'claude', scope: 'write' }).token
+    expect((await client(store, token).get('/api/backup')).status).toBe(403)
+
+    const [first, second] = await Promise.all([admin.get('/api/backup'), admin.get('/api/backup')])
+    const statuses = [first.status, second.status].sort()
+    expect(statuses).toEqual([200, 409])
+    const ok = first.status === 200 ? first : second
+    expect(ok.headers.get('content-type')).toBe('application/gzip')
+    expect(ok.headers.get('content-disposition')).toMatch(
+      /attachment; filename="relay-\d{8}-\d{6}\.tgz"/,
+    )
+    const bytes = Buffer.from(await ok.arrayBuffer())
+    expect(Number(ok.headers.get('content-length'))).toBe(bytes.length)
+    const tarball = gunzipSync(bytes).toString('latin1')
+    expect(tarball).toContain('manifest.json')
+    expect(tarball).toContain('"pages": 1')
+    expect(tarball).toContain('repo.bundle')
   })
 })

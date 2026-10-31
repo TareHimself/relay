@@ -2,7 +2,7 @@ import { existsSync, promises as fs } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
-import { and, eq, gt, inArray, ne } from 'drizzle-orm'
+import { and, count, eq, gt, inArray, ne } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import YAML from 'yaml'
@@ -34,7 +34,7 @@ import type {
 } from '../shared/pages'
 import { parseThreads, threadsPathFor, type Thread } from '../core/threads'
 
-const migrationsFolder = ['../../drizzle', '../drizzle']
+export const migrationsFolder = ['../../drizzle', '../drizzle']
   .map((candidate) => fileURLToPath(new URL(candidate, import.meta.url)))
   .find((folder) => existsSync(folder))!
 
@@ -134,6 +134,13 @@ function commitIdentity(
     name: (displayName && clean(displayName)) || clean(actor) || 'unknown',
     email: `${handle}@relay.local`,
   }
+}
+
+export interface SnapshotInfo {
+  hasRepo: boolean
+  projects: number
+  pages: number
+  threads: number
 }
 
 export class RelayStore {
@@ -1021,6 +1028,27 @@ export class RelayStore {
     }
     await fs.writeFile(file, `${lines.join('\n')}\n`, 'utf8')
     await this.repo.run(['config', 'mailmap.file', file])
+  }
+
+  snapshot(dir: string): Promise<SnapshotInfo> {
+    return this.serial(async () => {
+      await this.db.backup(join(dir, 'state.db'))
+      const hasRepo = await this.repo.run(['rev-parse', '--verify', 'HEAD']).then(
+        () => true,
+        () => false,
+      )
+      if (hasRepo) await this.repo.run(['bundle', 'create', join(dir, 'repo.bundle'), '--all'])
+      const blobs = join(this.repoDir, 'blobs')
+      if (existsSync(blobs)) await fs.cp(blobs, join(dir, 'blobs'), { recursive: true })
+      const rows = (table: typeof schema.projects | typeof schema.pages | typeof schema.threads) =>
+        this.orm.select({ n: count() }).from(table).get()?.n ?? 0
+      return {
+        hasRepo,
+        projects: rows(schema.projects),
+        pages: rows(schema.pages),
+        threads: rows(schema.threads),
+      }
+    })
   }
 
   async adoptActor(from: string, to: string): Promise<{ threadFiles: number; events: number }> {

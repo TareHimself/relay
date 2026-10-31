@@ -1,3 +1,7 @@
+import { createReadStream, promises as fs } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { Readable } from 'node:stream'
 import { Hono, type Context } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
@@ -21,6 +25,7 @@ import { searchQuery } from '../shared/search'
 import { tagsInput } from '../shared/tags'
 import { agentInstructionsInput, projectInstructionsInput } from '../shared/agentInstructions'
 import { tokenInput } from '../shared/tokens'
+import { backupFileName, withBackupLock, writeBackup } from '../store/backup'
 import type { RelayStore } from '../store/relay-store'
 import { setCookie, deleteCookie, getCookie } from 'hono/cookie'
 import { bodyLimit } from 'hono/body-limit'
@@ -172,6 +177,27 @@ export function createApp(store: RelayStore) {
   api.get('/problems', (c) => {
     workspace(c).access.admin()
     return c.json(store.listProblems())
+  })
+  api.get('/backup', (c) => {
+    workspace(c).access.admin()
+    return withBackupLock(store, async () => {
+      const name = backupFileName()
+      const file = join(await fs.mkdtemp(join(tmpdir(), 'relay-download-')), name)
+      try {
+        await writeBackup(store, file)
+      } catch (error) {
+        await fs.rm(dirname(file), { recursive: true, force: true })
+        throw error
+      }
+      const { size } = await fs.stat(file)
+      const stream = createReadStream(file)
+      stream.once('close', () => void fs.rm(dirname(file), { recursive: true, force: true }))
+      return c.body(Readable.toWeb(stream) as ReadableStream, 200, {
+        'content-type': 'application/gzip',
+        'content-length': String(size),
+        'content-disposition': `attachment; filename="${name}"`,
+      })
+    })
   })
 
   api.get('/settings/agent-instructions', (c) => {

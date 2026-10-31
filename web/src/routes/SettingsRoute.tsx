@@ -2,6 +2,7 @@ import { Paper, Stack, Title } from '@mantine/core'
 import type { ReactNode } from 'react'
 import { AccountSection } from '../components/settings/AccountSection'
 import { AgentInstructionsSection } from '../components/settings/AgentInstructionsSection'
+import { BackupSection } from '../components/settings/BackupSection'
 import { SessionsSection } from '../components/settings/SessionsSection'
 import { TokensSection } from '../components/settings/TokensSection'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
@@ -30,6 +31,9 @@ export function SettingsRoute() {
       </Card>
       <Card>
         <SessionsSection />
+      </Card>
+      <Card>
+        <BackupSection />
       </Card>
     </Stack>
   )

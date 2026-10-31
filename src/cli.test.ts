@@ -179,4 +179,36 @@ describe('server startup rules', () => {
     ).rejects.toThrow('example value')
     expect(store.accounts.hasAdmin()).toBe(false)
   })
+
+  it('backs up and restores a data directory', async () => {
+    const source = await cli(['set-password', '--stdin'], {
+      stdin: 'first password!\n',
+      env: { ADMIN_HANDLE: 'tare' },
+    })
+    const seeded = await RelayStore.open(source.directory)
+    const project = await seeded.createProject('Alpha', '', 'tare')
+    await seeded.createPage(project.id, 'Plan', 'body', 'tare')
+    seeded.close()
+    const archive = join(source.directory, 'out.tgz')
+    const backup = await cli(['backup', archive], { env: { DATA_DIR: source.directory } })
+    expect(backup.code).toBe(0)
+    expect(backup.out).toContain('1 projects, 1 pages')
+
+    const target = await fs.mkdtemp(join(tmpdir(), 'relay-cli-restore-'))
+    directories.push(target)
+    const restored = await cli(['restore', archive], { env: { DATA_DIR: target } })
+    expect(restored.code).toBe(0)
+    expect(restored.out).toContain('Restored 1 projects')
+    const admin = await cli(['admin'], { env: { DATA_DIR: target } })
+    expect(admin.out).toContain('handle: tare')
+
+    const again = await cli(['restore', archive], { env: { DATA_DIR: target } })
+    expect(again.code).not.toBe(0)
+    expect(again.err).toContain('--replace')
+    const replaced = await cli(['restore', archive, '--replace'], { env: { DATA_DIR: target } })
+    expect(replaced.code).toBe(0)
+    expect(replaced.out).toContain('Previous data moved to')
+    expect((await fs.readdir(target)).some((name) => name.startsWith('replaced-'))).toBe(true)
+    expect(await cli(['restore'], {}).then((r) => r.err)).toContain('Usage')
+  })
 })

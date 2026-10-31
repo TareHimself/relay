@@ -59,3 +59,11 @@ test('agent instructions are editable and project rules are human only', async (
   expect(instructions).toContain('Project rule for e2e.')
   expect(instructions).toContain('What pages can render')
 })
+
+test('settings offers a backup download', async ({ page }) => {
+  await seed(page, [{ title: 'Keep', body: 'x' }])
+  await page.goto('/settings')
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Download backup' }).click()
+  expect((await download).suggestedFilename()).toMatch(/^relay-\d{8}-\d{6}\.tgz$/)
+})

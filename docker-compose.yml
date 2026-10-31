@@ -6,12 +6,16 @@ services:
       - '${BIND:-127.0.0.1}:47821:47821'
     volumes:
       - relay-data:/data
+      - ./data/backups:/data/backups
     environment:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env to create the admin on first start}
       ADMIN_HANDLE: ${ADMIN_HANDLE:-admin}
       ADMIN_NAME: ${ADMIN_NAME:-Admin}
       TRUST_PROXY: ${TRUST_PROXY:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
+      RESTORE_FROM: ${RESTORE_FROM:-}
+      BACKUP_EVERY: ${BACKUP_EVERY:-}
+      BACKUP_KEEP: ${BACKUP_KEEP:-}
 
   tailscale:
     image: tailscale/tailscale:stable
@@ -26,22 +30,6 @@ services:
     volumes:
       - ./data/tailscale:/var/lib/tailscale
       - ./tailscale/serve.json:/config/serve.json:ro
-
-  backup:
-    image: alpine
-    profiles: ['tools']
-    volumes:
-      - relay-data:/data:ro
-      - ./data/backups:/backup
-    command: sh -c 'tar -czf "/backup/relay-$$(date +%Y%m%d-%H%M%S).tgz" -C /data . && ls -l /backup'
-
-  restore:
-    image: alpine
-    profiles: ['tools']
-    volumes:
-      - relay-data:/data
-      - ./data/backups:/backup:ro
-    command: sh -c 'test -n "$$FILE" && test -f "/backup/$$FILE" && tar -xzf "/backup/$$FILE" -C /data && echo restored "$$FILE"'
 
 volumes:
   relay-data:

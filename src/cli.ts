@@ -1,6 +1,8 @@
+import { resolve } from 'node:path'
 import { StoreError } from './core/errors'
 import { RelayStore } from './store/relay-store'
 import { watch } from './watch'
+import { backupFileName, readBackup, writeBackup } from './store/backup'
 
 export interface CliIo {
   isTTY: boolean
@@ -31,6 +33,11 @@ Commands:
                            (needs RELAY_TOKEN; RELAY_URL defaults to http://localhost:47821)
   tidy-history [--apply]   Merge old runs of autosave commits into single versions
                            (shows the plan first; --apply rewrites history, stop the server)
+  backup [file.tgz]        Write the whole instance (pages, history, threads, tokens, accounts)
+                           to one archive (stop the server first; a running server backs up
+                           from Settings or BACKUP_EVERY instead)
+  restore <file.tgz>       Restore an archive into an empty DATA_DIR (stop the server first;
+                           --replace moves existing data aside first)
   help                     Show this help
 
 Environment: DATA_DIR (default ./data), ADMIN_HANDLE and ADMIN_NAME (used when the
@@ -115,6 +122,30 @@ export async function runCli(
           err: io.err,
           signal,
         })
+        return 0
+      }
+      case 'backup': {
+        const out = resolve(args[0] ?? backupFileName())
+        return await withStore(env, async (store) => {
+          const manifest = await writeBackup(store, out)
+          io.out(
+            `Wrote ${out} (${manifest.projects} projects, ${manifest.pages} pages, ` +
+              `${manifest.threads} threads).`,
+          )
+          return 0
+        })
+      }
+      case 'restore': {
+        const file = args.find((arg) => !arg.startsWith('--'))
+        if (!file) throw new StoreError('invalid', 'Usage: relay restore <file.tgz> [--replace]')
+        const manifest = await readBackup(file, env.DATA_DIR ?? './data', {
+          replace: args.includes('--replace'),
+          log: io.out,
+        })
+        io.out(
+          `Restored ${manifest.projects} projects, ${manifest.pages} pages and ` +
+            `${manifest.threads} threads from ${file}.`,
+        )
         return 0
       }
       case 'tidy-history':
