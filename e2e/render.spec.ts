@@ -62,3 +62,41 @@ test('table hover buttons can be reached and clicked', async ({ page }) => {
   await column.click()
   await expect(page.locator('thead th')).toHaveCount(3)
 })
+
+test('mermaid diagrams zoom into a lightbox and the source has a Done button', async ({ page }) => {
+  const body = ['```mermaid', 'graph LR', '  Agent --> Relay --> Human', '```', '', 'after'].join(
+    '\n',
+  )
+  const { project, pages } = await seed(page, [{ title: 'Zoom', body }])
+  await openDoc(page, project.id, pages[0]!.id)
+  const block = page.locator('.cm-mermaid-block')
+  await expect(block.locator(':scope > svg')).toBeVisible()
+  await block.hover()
+  const zoom = page.getByRole('button', { name: 'Zoom diagram' })
+  await expect(zoom).toBeVisible()
+  await zoom.click()
+  const lightbox = page.locator('.relay-lightbox')
+  await expect(lightbox.locator('svg')).toBeVisible()
+  await expect(page.locator('.mantine-Modal-content')).toHaveCSS('opacity', '1')
+  const before = (await lightbox.locator('svg').boundingBox())!
+  await page.getByRole('button', { name: 'Zoom in' }).click()
+  await expect(page.locator('.mantine-Modal-title')).toContainText('125%')
+  await expect
+    .poll(async () => (await lightbox.locator('svg').boundingBox())!.width)
+    .toBeCloseTo(before.width * 1.25, 0)
+  await expect(page.locator('.relay-lightbox__diagram')).not.toHaveCSS(
+    'transform',
+    /scale|matrix\(1\.25/,
+  )
+  await page.keyboard.press('Escape')
+  await expect(lightbox).toHaveCount(0)
+
+  await block.hover()
+  await block.locator('.cm-mermaid-edit').click()
+  await expect(block).toHaveCount(0)
+  const done = page.getByRole('button', { name: 'Done' })
+  await expect(done).toBeVisible()
+  await done.click()
+  await expect(page.locator('.cm-mermaid-block > svg')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Done' })).toHaveCount(0)
+})

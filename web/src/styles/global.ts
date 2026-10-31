@@ -112,6 +112,81 @@ export const globals = css`
       color: var(--mantine-color-green-text);
       opacity: 1;
     }
+    .cm-editor-host .relay-done {
+      position: absolute;
+      top: calc(var(--relay-block-gap) + 1.42em - 12px);
+      right: calc(0.75em + 32px);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 24px;
+      padding: 0 10px 0 8px;
+      border: 1px solid var(--mantine-color-default-border);
+      border-radius: 999px;
+      background: var(--mantine-color-body);
+      color: var(--mantine-color-text);
+      font: inherit;
+      font-size: 0.75rem;
+      font-weight: 500;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .cm-editor-host .relay-done:hover {
+      background: var(--mantine-color-default-hover);
+    }
+    .cm-editor-host .relay-zoom {
+      position: absolute;
+      inset-block-start: 0.375rem;
+      inset-inline-end: 3.125rem;
+      display: grid;
+      place-items: center;
+      width: 1.55rem;
+      height: 1.45rem;
+      padding: 0;
+      color: var(--cds-text-secondary);
+      background: var(--cds-layer-01);
+      border: 0.0625rem solid var(--cds-border-subtle-01);
+      border-radius: 999rem;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 80ms ease;
+    }
+    .cm-editor-host .cm-mermaid-block:hover .relay-zoom,
+    .cm-editor-host .relay-zoom:focus-visible {
+      opacity: 1;
+    }
+    .cm-editor-host .relay-zoom:hover {
+      color: var(--mantine-color-text);
+    }
+    .relay-lightbox {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: contain;
+      touch-action: none;
+      cursor: grab;
+      display: grid;
+      place-items: center;
+      background: var(--mantine-color-body);
+    }
+    .relay-lightbox[data-dragging] {
+      cursor: grabbing;
+    }
+    .relay-lightbox__diagram {
+      display: flex;
+      justify-content: center;
+      width: 100%;
+      line-height: 0;
+      user-select: none;
+    }
+    .relay-lightbox__diagram > svg {
+      flex: none;
+      pointer-events: none;
+    }
+    :root[data-mantine-color-scheme='dark'] .relay-lightbox__diagram > svg {
+      filter: invert(0.92) hue-rotate(180deg);
+    }
     .cm-editor-host .cm-inline-code,
     .cm-editor-host .cm-highlight {
       border-radius: var(--mantine-radius-sm);

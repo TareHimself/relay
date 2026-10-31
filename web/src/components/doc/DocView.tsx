@@ -24,6 +24,8 @@ import {
 import { DRAFT_ID, commentsExtension, markRanges } from '../../editor/commentsExtension'
 import { codeBlockCopy } from '../../editor/codeBlockCopy'
 import { codeBlockExitKeys } from '../../editor/codeBlockExit'
+import { diagramDone } from '../../editor/diagramDone'
+import { diagramZoom } from '../../editor/diagramZoom'
 import { DocEditor } from '../../editor/DocEditor'
 import { headingPlaceholder } from '../../editor/headingPlaceholder'
 import { linkDraftFromSelection } from '../../editor/link'
@@ -33,10 +35,10 @@ import { LinkHoverCard } from '../../editor/LinkHoverCard'
 import { linkClicks } from '../../editor/linkClicks'
 import { linkKinds } from '../../editor/linkKinds'
 import { svgBlock } from '../../editor/svgBlock'
-import { SelectionBar } from '../../editor/SelectionBar'
-import { draftFromSelection } from '../../editor/selectionDraft'
 import { tableInserters } from '../../editor/tableInserters'
 import { DiagramLightbox } from './DiagramLightbox'
+import { SelectionBar } from '../../editor/SelectionBar'
+import { draftFromSelection } from '../../editor/selectionDraft'
 import { useCommentLayout } from '../../editor/useCommentLayout'
 import { noWritingAssistant } from '../../editor/writingAssistants'
 import { useDocSync } from '../../editor/useDocSync'
@@ -120,6 +122,7 @@ export function DocView({ page, projectName }: DocViewProps) {
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
+  const [zoomedDiagram, setZoomedDiagram] = useState<string | null>(null)
   const renamePage = useRenamePage(page)
   const [params, setParams] = useSearchParams()
   const targetThread = params.get('thread')
@@ -135,13 +138,15 @@ export function DocView({ page, projectName }: DocViewProps) {
       headingPlaceholder,
       codeBlockExitKeys,
       codeBlockCopy,
+      diagramDone,
+      diagramZoom(setZoomedDiagram),
       svgBlock,
+      tableInserters,
       linkKinds,
       linkClicks((path) => void navigate(path)),
     ],
     [bridge, navigate],
   )
-      tableInserters,
   const wide = useMediaQuery('(min-width: 62em)') ?? true
   const columns = useRef<HTMLDivElement>(null)
 
@@ -394,6 +399,7 @@ export function DocView({ page, projectName }: DocViewProps) {
       {sync.status === 'conflict' && (
         <ConflictBanner onLoadLatest={sync.loadLatest} onKeepMine={sync.keepMine} />
       )}
+      <DiagramLightbox svg={zoomedDiagram} onClose={() => setZoomedDiagram(null)} />
       <Columns ref={columns} data-wide={wide}>
         <Sheet>
           <Stack gap="lg">
