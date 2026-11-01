@@ -45,6 +45,8 @@ docker compose up -d
 
 With the server stopped, the CLI does the same: `relay backup [file.tgz]` and `relay restore <file.tgz> [--replace]` (`--replace` moves the existing data to `replaced-<timestamp>/` inside the data directory first). In Docker: `docker compose stop relay`, then `docker compose run --rm relay relay backup /data/backups/manual.tgz`.
 
+Backups from older Relay versions restore into newer ones. The archive's `manifest.json` records a format number and the Relay version that wrote it; restore rejects a format it does not know. The database inside is the raw `state.db`, so an older schema is brought up to date by the normal Drizzle migrations on the next start, and a backup made by a newer Relay is refused with a message to update first. When changing Relay: schema changes need only a new migration in `drizzle/`; bump `BACKUP_FORMAT` in `src/store/backup.ts` only when the archive layout itself changes.
+
 #### Tailscale instead of a public port
 
 An optional `tailscale` service proxies Relay over your tailnet instead of publishing a port at all. Generate a device auth key at [login.tailscale.com/admin/settings/keys](https://login.tailscale.com/admin/settings/keys) — **"Generate auth key"**, not an OAuth client secret or other API key, or the container will reject it as invalid — and set it as `TS_AUTHKEY` in `.env`, along with `TRUST_PROXY=1`:
