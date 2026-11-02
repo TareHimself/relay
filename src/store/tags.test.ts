@@ -65,7 +65,9 @@ describe('page tags', () => {
   it('clears tags and refuses a stale revision', async () => {
     const { store, page } = await setup()
     expect((await store.setTags(page.id, [], page.revision, 'tare')).tags).toEqual([])
-    await expect(store.setTags(page.id, ['x'], page.revision, 'tare')).rejects.toMatchObject({
+    await expect(async () =>
+      store.setTags(page.id, ['x'], page.revision, 'tare'),
+    ).rejects.toMatchObject({
       code: 'conflict',
     })
   })
@@ -79,7 +81,7 @@ describe('page tags', () => {
     expect(store.listTags().find((entry) => entry.tag === 'design')?.count).toBe(2)
   })
 
-  it('survives a restart and tolerates hand-edited tags', async () => {
+  it('survives a restart', async () => {
     const { store, page } = await setup()
     store.close()
     const reopened = await RelayStore.open((store as unknown as { dataDir: string }).dataDir)

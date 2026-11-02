@@ -38,22 +38,6 @@ export function parsePageFile(markdown: string): PageFile {
   }
 }
 
-export function withFrontmatter(
-  markdown: string,
-  changes: { title?: string; tags?: readonly string[] },
-): string {
-  const match = HEAD.exec(markdown)
-  if (!match) return markdown
-  const document = YAML.parseDocument(match[1] ?? '')
-  if (changes.title !== undefined) document.set('title', changes.title)
-  if (changes.tags !== undefined) document.set('tags', [...changes.tags])
-  return `---\n${document.toString().trimEnd()}\n---\n${markdown.slice(match[0].length)}`
-}
-
-export function withBody(markdown: string, body: string): string {
-  return splitFrontmatter(markdown).head + body
-}
-
 function startsWithFrontmatter(body: string): boolean {
   const match = HEAD.exec(body)
   const mapping = match ? mappingOf(match[1] ?? '') : null

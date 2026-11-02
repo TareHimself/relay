@@ -15,16 +15,10 @@ import {
 } from '@mantine/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
-import type { Page } from '@shared/pages'
+import type { HistoryEntry, Page } from '@shared/pages'
 import { useDisplayName } from '../../api/identity'
 import { ApiError, errorMessage } from '../../api/http'
-import {
-  keys,
-  useHistory,
-  useRestoreVersion,
-  useVersion,
-  type HistoryEntry,
-} from '../../api/queries'
+import { keys, useHistory, useRestoreVersion, useVersion } from '../../api/queries'
 import { lineDiff, type DiffKind } from '../../lib/lineDiff'
 import { timeAgo } from '../../lib/timeAgo'
 
@@ -93,9 +87,10 @@ const plainText = css`
 const MARKERS: Record<DiffKind, string> = { add: '+ ', del: '− ', ctx: '  ', gap: '⋯ ' }
 
 function describe(entry: HistoryEntry): string {
-  const verb = entry.subject.split(':')[0]
-  if (verb === 'create') return 'Created'
-  if (verb === 'restore') return 'Restored an earlier version'
+  if (entry.kind === 'create') return 'Created'
+  if (entry.kind === 'restore') return 'Restored an earlier version'
+  if (entry.kind === 'rename') return entry.summary ?? 'Renamed'
+  if (entry.kind === 'tags') return 'Changed tags'
   return 'Edited'
 }
 
@@ -111,21 +106,21 @@ function VersionsPanel({ page, onClose, beforeRestore }: VersionsPanelProps) {
   const nameOf = useDisplayName()
   const restore = useRestoreVersion(page.id)
   const entries = history.data ?? []
-  const head = entries[0]?.hash ?? ''
+  const head = entries[0]?.id ?? ''
   const [picked, setPicked] = useState<string | null>(null)
   const [mode, setMode] = useState<'changes' | 'text'>('changes')
   const [confirming, setConfirming] = useState(false)
 
-  const selected = picked ?? entries[1]?.hash ?? null
+  const selected = picked ?? entries[1]?.id ?? null
 
-  function select(hash: string) {
-    setPicked(hash)
+  function select(id: string) {
+    setPicked(id)
     setConfirming(false)
     restore.reset()
   }
 
-  const chosen = entries.find((entry) => entry.hash === selected)
-  const isCurrent = chosen !== undefined && chosen.hash === head
+  const chosen = entries.find((entry) => entry.id === selected)
+  const isCurrent = chosen !== undefined && chosen.id === head
   const version = useVersion(page.id, isCurrent ? null : selected)
   const parsed = useMemo(
     () => (version.data ? lineDiff(page.body, version.data.body) : undefined),
@@ -137,7 +132,7 @@ function VersionsPanel({ page, onClose, beforeRestore }: VersionsPanelProps) {
     await beforeRestore()
     const latest = queryClient.getQueryData<Page>(keys.page(page.id)) ?? page
     try {
-      await restore.mutateAsync({ hash: chosen.hash, ifRevision: latest.revision })
+      await restore.mutateAsync({ versionId: chosen.id, ifRevision: latest.revision })
       onClose()
     } catch {
       setConfirming(false)
@@ -163,12 +158,12 @@ function VersionsPanel({ page, onClose, beforeRestore }: VersionsPanelProps) {
       <ScrollArea.Autosize mah={280} type="auto">
         <Stack gap={2} component="ul" m={0} p={0} style={{ listStyle: 'none' }}>
           {entries.map((entry, index) => (
-            <li key={entry.hash}>
+            <li key={entry.id}>
               <UnstyledButton
                 className={row}
-                data-selected={entry.hash === selected}
-                aria-pressed={entry.hash === selected}
-                onClick={() => select(entry.hash)}
+                data-selected={entry.id === selected}
+                aria-pressed={entry.id === selected}
+                onClick={() => select(entry.id)}
               >
                 <Group justify="space-between" wrap="nowrap" gap="xs">
                   <Text size="sm" fw={600}>
@@ -180,8 +175,8 @@ function VersionsPanel({ page, onClose, beforeRestore }: VersionsPanelProps) {
                     </Badge>
                   )}
                 </Group>
-                <Text size="xs" c="dimmed" title={new Date(entry.date).toLocaleString()}>
-                  {nameOf(entry.handle)} · {timeAgo(entry.date)}
+                <Text size="xs" c="dimmed" title={new Date(entry.updatedAt).toLocaleString()}>
+                  {nameOf(entry.actor)} · {timeAgo(entry.updatedAt)}
                 </Text>
               </UnstyledButton>
             </li>
@@ -259,8 +254,8 @@ function VersionsPanel({ page, onClose, beforeRestore }: VersionsPanelProps) {
           {confirming ? (
             <Alert color="yellow" title="Restore this version?">
               <Text size="sm" mb="sm">
-                The text from {timeAgo(chosen.date)} becomes the newest version. What you have now
-                stays in the history.
+                The text from {timeAgo(chosen.updatedAt)} becomes the newest version. What you have
+                now stays in the history.
               </Text>
               <Group gap="xs">
                 <Button size="xs" loading={restore.isPending} onClick={() => void confirmRestore()}>

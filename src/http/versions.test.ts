@@ -23,27 +23,27 @@ describe('version routes', () => {
   it('lists, reads and restores versions', async () => {
     const { admin, page, history, current } = await setup()
     expect(history).toHaveLength(2)
-    const oldest = history.at(-1).hash
+    const oldest = history.at(-1).id
 
     const version = await json(await admin.get(`/api/pages/${page.id}/versions/${oldest}`))
-    expect(version.hash).toBe(oldest)
+    expect(version.id).toBe(oldest)
     expect(version.body).toContain('first')
 
     const restored = await admin.send('POST', `/api/pages/${page.id}/restore`, {
-      hash: oldest,
+      versionId: oldest,
       ifRevision: current.revision,
     })
     expect(restored.status).toBe(200)
     expect((await json(restored)).body).toContain('first')
     const after = await json(await admin.get(`/api/pages/${page.id}/history`))
     expect(after).toHaveLength(3)
-    expect(after[0].subject).toMatch(/^restore: /)
+    expect(after[0].kind).toBe('restore')
   })
 
   it('answers a stale restore with a conflict and a missing version with 404', async () => {
     const { admin, page, history } = await setup()
     const stale = await admin.send('POST', `/api/pages/${page.id}/restore`, {
-      hash: history.at(-1).hash,
+      versionId: history.at(-1).id,
       ifRevision: 'not-the-revision',
     })
     expect(stale.status).toBe(409)
@@ -56,10 +56,10 @@ describe('version routes', () => {
       await admin.send('POST', '/api/tokens', { name: 'reader', scope: 'read' }),
     )
     const reader = client(store, minted.token)
-    const oldest = history.at(-1).hash
+    const oldest = history.at(-1).id
     expect((await reader.get(`/api/pages/${page.id}/versions/${oldest}`)).status).toBe(200)
     const denied = await reader.send('POST', `/api/pages/${page.id}/restore`, {
-      hash: oldest,
+      versionId: oldest,
       ifRevision: current.revision,
     })
     expect(denied.status).toBe(403)

@@ -4,7 +4,6 @@ import {
   anchorFor,
   editMessage,
   mentionsIn,
-  parseThreads,
   removeMessage,
   startThread,
 } from './threads'
@@ -55,11 +54,6 @@ describe('thread lifecycle', () => {
     expect(reopened.addressed).toEqual(['reviewer'])
     expect(reopened.thread.to).toEqual(['claude', 'reviewer'])
     expect(reopened.thread.messages).toHaveLength(3)
-  })
-
-  it('rejects malformed thread files', () => {
-    expect(() => parseThreads('{"threads":[{"id":1}]}')).toThrowError(/malformed/)
-    expect(parseThreads(null)).toEqual([])
   })
 })
 

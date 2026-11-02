@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../http/app'
 import { adminClient, cleanupStores, json, tempStore } from '../test-support'
 
@@ -207,11 +207,11 @@ describe('MCP endpoint', () => {
       edits: [{ find: 'old goals', replace: 'bold goals' }],
     })
     const history = (await agent.call('history', { id: page.id })).data
-    expect(history[0].author).toBe('claude')
+    expect(history[0].actor).toBe('claude')
     const diff = await agent.call('diff', {
       id: page.id,
-      from: history[1].hash,
-      to: history[0].hash,
+      from: history[1].id,
+      to: history[0].id,
     })
     expect(diff.data.diff).toContain('+bold goals')
   })
@@ -303,7 +303,7 @@ describe('MCP endpoint', () => {
     expect((await agent.call('edit_page', { id: page.id })).isError).toBe(true)
   })
 
-  it('answers an unsupported protocol version with a 404 instead of a 500', async () => {
+  it('answers an unsupported protocol version with a 400 instead of a 500', async () => {
     const { store, mint } = await setup()
     const token = await mint({ name: 'claude' })
     const response = await createApp(store).request('/mcp', {
@@ -316,8 +316,25 @@ describe('MCP endpoint', () => {
       },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
     })
-    expect(response.status).toBe(404)
+    expect(response.status).toBe(400)
     expect((await response.json()).error.message).toContain('Unsupported protocol version')
+  })
+
+  it('logs unexpected errors and hides them from the client', async () => {
+    const { store, page, mint } = await setup()
+    const agent = mcp(store, await mint({ name: 'claude' }))
+    const secret = "ENOENT: no such file '/data/db/state.db'"
+    const failure = new Error(secret)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.spyOn(store, 'history').mockImplementation(() => {
+      throw failure
+    })
+    const answer = await agent.call('history', { id: page.id })
+    expect(answer.isError).toBe(true)
+    expect(answer.data).toEqual({ error: 'internal', message: 'Internal server error' })
+    expect(JSON.stringify(answer)).not.toContain('state.db')
+    expect(logged).toHaveBeenCalledWith(failure)
+    vi.restoreAllMocks()
   })
 
   it('creates projects', async () => {

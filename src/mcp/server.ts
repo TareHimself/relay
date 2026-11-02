@@ -28,8 +28,8 @@ async function respond(work: () => unknown): Promise<CallToolResult> {
     if (error instanceof StoreError) {
       return result({ error: error.code, message: error.message, details: error.details }, true)
     }
-    if (error instanceof z.ZodError) return result({ error: 'invalid', issues: error.issues }, true)
-    throw error
+    console.error(error)
+    return result({ error: 'internal', message: 'Internal server error' }, true)
   }
 }
 
@@ -88,7 +88,7 @@ export function createMcpServer(workspace: Workspace): McpServer {
     'rename_project',
     {
       title: 'Rename project',
-      description: "Change a project's display name. Its internal path is unaffected.",
+      description: "Change a project's display name.",
       inputSchema: { id: z.string(), ...renameProjectInput.shape },
     },
     ({ id, name }) => respond(() => workspace.renameProject(id, name)),
@@ -185,10 +185,9 @@ export function createMcpServer(workspace: Workspace): McpServer {
     {
       title: 'Rename page',
       description:
-        "Change a page's title. Its file is renamed to match, kept in the same project; history " +
-        'and comment threads move with it. Pass ifRevision from your last read to refuse the ' +
-        'change if the page changed. Returns the page metadata; pass includeBody to get the body ' +
-        'back too.',
+        "Change a page's title. Its id, history and comment threads stay. Pass ifRevision from " +
+        'your last read to refuse the change if the page changed. Returns the page metadata; pass ' +
+        'includeBody to get the body back too.',
       inputSchema: {
         id: z.string(),
         ...renamePageInput.shape,
@@ -302,10 +301,17 @@ export function createMcpServer(workspace: Workspace): McpServer {
     'history',
     {
       title: 'History',
-      description: "List a page's commits, newest first (hash, author, date, subject).",
-      inputSchema: { id: z.string() },
+      description:
+        "List a page's versions, newest first: id, kind (create, edit, rename, tags, restore), " +
+        'actor, summary, createdAt and updatedAt. Saves by one person within a few minutes are ' +
+        'one version. Page with limit and offset.',
+      inputSchema: {
+        id: z.string(),
+        limit: z.number().int().min(1).max(500).optional(),
+        offset: z.number().int().min(0).optional(),
+      },
     },
-    ({ id }) => respond(() => workspace.history(id)),
+    ({ id, limit, offset }) => respond(() => workspace.history(id, { limit, offset })),
   )
 
   server.registerTool(
@@ -313,7 +319,8 @@ export function createMcpServer(workspace: Workspace): McpServer {
     {
       title: 'Diff',
       description:
-        "Show the unified diff of a page between two commits from its history. 'to' defaults to HEAD.",
+        'Show the unified diff of a page between two versions from its history, by version id. ' +
+        "'to' defaults to the current text.",
       inputSchema: { id: z.string(), from: z.string(), to: z.string().optional() },
     },
     ({ id, from, to }) => respond(() => workspace.diff(id, from, to)),
@@ -324,8 +331,8 @@ export function createMcpServer(workspace: Workspace): McpServer {
     {
       title: 'Delete page',
       description:
-        'Delete a page and its comment threads. The page history stays in the data repository ' +
-        'so an administrator can recover it. Pass ifRevision from your last read to refuse the ' +
+        'Delete a page and its comment threads. The page and its history are kept so an ' +
+        'administrator can recover it. Pass ifRevision from your last read to refuse the ' +
         'delete if the page changed since.',
       inputSchema: { id: z.string(), ifRevision: z.string().optional() },
     },
@@ -365,10 +372,11 @@ export function createMcpServer(workspace: Workspace): McpServer {
     'read_version',
     {
       title: 'Read version',
-      description: "Read a page's body (plain markdown) as it was at a commit from its history.",
-      inputSchema: { id: z.string(), hash: z.string() },
+      description:
+        'Read a page as it was at a version from its history (title, tags and plain markdown body).',
+      inputSchema: { id: z.string(), versionId: z.string() },
     },
-    ({ id, hash }) => respond(() => workspace.version(id, hash)),
+    ({ id, versionId }) => respond(() => workspace.version(id, versionId)),
   )
 
   server.registerTool(
@@ -376,12 +384,12 @@ export function createMcpServer(workspace: Workspace): McpServer {
     {
       title: 'Restore version',
       description:
-        'Restore a page to an earlier version from its history. The old text is saved as a new ' +
+        'Restore a page to an earlier version from its history. The current text is kept as a ' +
         'version, so nothing is lost. Pass ifRevision from your last read; the restore is ' +
         'refused if the page changed since.',
-      inputSchema: { id: z.string(), hash: z.string(), ifRevision: z.string() },
+      inputSchema: { id: z.string(), versionId: z.string(), ifRevision: z.string() },
     },
-    ({ id, hash, ifRevision }) => respond(() => workspace.restore(id, hash, ifRevision)),
+    ({ id, versionId, ifRevision }) => respond(() => workspace.restore(id, versionId, ifRevision)),
   )
 
   server.registerTool(

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import * as schema from '../db/schema'
 import type { Orm } from '../db/orm'
 import { StoreError } from '../core/errors'
@@ -6,16 +6,14 @@ import {
   addMessage,
   anchorFor,
   editMessage as applyMessageEdit,
-  parseThreads,
   removeMessage,
-  serializeThreads,
   startThread,
-  threadsPathFor,
   type AnchorContext,
   type Thread,
   type ThreadStatus,
 } from '../core/threads'
-import type { StoredPage, StoredPageSummary, StoreEvent } from '../shared/pages'
+import type { Page, PageSummary, StoreEvent } from '../shared/pages'
+import type { Message } from '../shared/threads'
 import { excerpt, newEvent } from './events'
 
 export interface PageThread extends Thread {
@@ -25,19 +23,10 @@ export interface PageThread extends Thread {
 
 export interface ThreadHost {
   orm: Orm
-  serial: <T>(work: () => Promise<T>) => Promise<T>
-  readFile: (path: string) => Promise<string | null>
-  commit: (
-    path: string,
-    expected: string | null,
-    content: string,
-    actor: string,
-    events: StoreEvent[],
-  ) => Promise<void>
-  pageRow: (id: string) => StoredPageSummary
-  readPage: (id: string) => Promise<StoredPage>
-  allPages: () => StoredPageSummary[]
-  indexed: (page: StoredPageSummary, threads: Thread[]) => void
+  pageRow: (id: string) => PageSummary
+  readPage: (id: string) => Page
+  write: <T>(work: (emit: (event: StoreEvent) => void) => T) => T
+  now: () => string
 }
 
 interface ThreadFilter {
@@ -46,41 +35,77 @@ interface ThreadFilter {
   status?: ThreadStatus | undefined
 }
 
+type ThreadRow = typeof schema.threads.$inferSelect
+type MessageRow = typeof schema.messages.$inferSelect
+
+const MAX_ANCHOR = 2000
+const MAX_CONTEXT = 200
+
+function threadOf(row: ThreadRow, messages: readonly MessageRow[]): Thread {
+  const thread: Thread = {
+    id: row.id,
+    status: row.status,
+    to: row.recipients,
+    messages: messages.map((m) => ({
+      id: m.id,
+      author: m.author,
+      body: m.body,
+      at: m.at,
+      ...(m.editedAt ? { editedAt: m.editedAt } : {}),
+    })),
+  }
+  if (row.anchorExact !== null && row.anchorOffset !== null) {
+    thread.anchor = {
+      exact: row.anchorExact,
+      prefix: row.anchorPrefix ?? '',
+      suffix: row.anchorSuffix ?? '',
+      offset: row.anchorOffset,
+    }
+  }
+  return thread
+}
+
 export class ThreadService {
   constructor(private readonly host: ThreadHost) {}
 
   projectIdOf(threadId: string): string {
-    return this.pageOf(threadId).projectId
+    return this.host.pageRow(this.row(threadId).pageId).projectId
   }
 
-  async listForPage(pageId: string): Promise<Thread[]> {
-    return (await this.load(this.host.pageRow(pageId))).threads
-  }
-
-  async list(filter: ThreadFilter = {}): Promise<PageThread[]> {
+  listForPage(pageId: string): Thread[] {
+    this.host.pageRow(pageId)
     const rows = this.host.orm
       .select()
       .from(schema.threads)
+      .where(eq(schema.threads.pageId, pageId))
+      .orderBy(schema.threads.id)
+      .all()
+    return this.attach(rows)
+  }
+
+  list(filter: ThreadFilter = {}): PageThread[] {
+    const rows = this.host.orm
+      .select({ thread: schema.threads })
+      .from(schema.threads)
+      .innerJoin(schema.pages, eq(schema.pages.id, schema.threads.pageId))
       .where(
         and(
+          isNull(schema.pages.deletedAt),
           eq(schema.threads.status, filter.status ?? 'open'),
           filter.projectId ? eq(schema.threads.projectId, filter.projectId) : undefined,
         ),
       )
       .orderBy(schema.threads.id)
       .all()
+      .map((row) => row.thread)
     const to = filter.to?.toLowerCase()
-    const result: PageThread[] = []
-    for (const pageId of new Set(rows.map((row) => row.pageId))) {
-      const page = this.host.pageRow(pageId)
-      const ids = new Set(rows.filter((row) => row.pageId === pageId).map((row) => row.id))
-      const { threads } = await this.load(page)
-      for (const thread of threads) {
-        if (!ids.has(thread.id) || (to && !thread.to.includes(to))) continue
-        result.push({ ...thread, pageId, projectId: page.projectId })
-      }
-    }
-    return result.sort((a, b) => a.id.localeCompare(b.id))
+    const wanted = to ? rows.filter((row) => row.recipients.includes(to)) : rows
+    const threads = this.attach(wanted)
+    return threads.map((thread, index) => ({
+      ...thread,
+      pageId: wanted[index]!.pageId,
+      projectId: wanted[index]!.projectId,
+    }))
   }
 
   create(
@@ -88,10 +113,18 @@ export class ThreadService {
     body: string,
     options: { anchorText?: string; context?: AnchorContext; to?: string[] },
     actor: string,
-  ): Promise<Thread> {
-    return this.host.serial(async () => {
-      const page = await this.host.readPage(pageId)
-      const { raw, threads } = await this.load(page)
+  ): Thread {
+    if (options.anchorText !== undefined && options.anchorText.length > MAX_ANCHOR) {
+      throw new StoreError('invalid', `anchorText is longer than ${MAX_ANCHOR} characters`)
+    }
+    if (
+      options.context &&
+      (options.context.prefix.length > MAX_CONTEXT || options.context.suffix.length > MAX_CONTEXT)
+    ) {
+      throw new StoreError('invalid', `context is longer than ${MAX_CONTEXT} characters`)
+    }
+    return this.host.write((emit) => {
+      const page = this.host.readPage(pageId)
       const thread = startThread({
         anchor:
           options.anchorText === undefined
@@ -100,24 +133,39 @@ export class ThreadService {
         author: actor,
         body,
         to: options.to,
-        at: new Date().toISOString(),
+        at: this.host.now(),
       })
-      const events = [
+      this.host.orm
+        .insert(schema.threads)
+        .values({
+          id: thread.id,
+          pageId: page.id,
+          projectId: page.projectId,
+          status: thread.status,
+          anchorExact: thread.anchor?.exact ?? null,
+          anchorPrefix: thread.anchor?.prefix ?? null,
+          anchorSuffix: thread.anchor?.suffix ?? null,
+          anchorOffset: thread.anchor?.offset ?? null,
+          recipients: thread.to,
+          createdAt: this.host.now(),
+        })
+        .run()
+      this.saveMessages(thread.id, [], thread.messages)
+      emit(
         newEvent('comment.created', actor, page.projectId, {
           pageId,
           threadId: thread.id,
           summary: excerpt(body),
         }),
-        ...this.addressed(thread.to, actor, page, thread.id, body),
-      ]
-      await this.save(page, raw, [...threads, thread], actor, events)
+      )
+      for (const event of this.addressed(thread.to, actor, page, thread.id, body)) emit(event)
       return thread
     })
   }
 
-  reply(threadId: string, body: string, actor: string): Promise<Thread> {
-    return this.update(threadId, actor, (current, page) => {
-      const { thread, addressed } = addMessage(current, actor, body, new Date().toISOString())
+  reply(threadId: string, body: string, actor: string): Thread {
+    return this.update(threadId, (current, page) => {
+      const { thread, addressed } = addMessage(current, actor, body, this.host.now())
       const recipients = [...new Set([...addressed, ...current.to])].filter(
         (handle) => handle.toLowerCase() !== actor.toLowerCase(),
       )
@@ -135,14 +183,14 @@ export class ThreadService {
     })
   }
 
-  editMessage(threadId: string, messageId: string, body: string, actor: string): Promise<Thread> {
-    return this.update(threadId, actor, (current, page) => {
+  editMessage(threadId: string, messageId: string, body: string, actor: string): Thread {
+    return this.update(threadId, (current, page) => {
       const { thread, addressed } = applyMessageEdit(
         current,
         messageId,
         actor,
         body,
-        new Date().toISOString(),
+        this.host.now(),
       )
       if (thread === current) return { thread, events: [] }
       return {
@@ -159,31 +207,24 @@ export class ThreadService {
     })
   }
 
-  deleteMessage(
-    threadId: string,
-    messageId: string,
-    actor: string,
-  ): Promise<{ threadRemoved: boolean }> {
-    return this.host.serial(async () => {
-      const page = this.pageOf(threadId)
-      const { raw, threads } = await this.load(page)
-      const current = threads.find((t) => t.id === threadId)
-      if (!current) throw new StoreError('not_found', 'Thread not found')
+  deleteMessage(threadId: string, messageId: string, actor: string): { threadRemoved: boolean } {
+    return this.host.write((emit) => {
+      const row = this.row(threadId)
+      const page = this.host.pageRow(row.pageId)
+      const current = this.attach([row])[0]!
       const remaining = removeMessage(current, messageId, actor)
-      const next = remaining
-        ? threads.map((t) => (t.id === threadId ? remaining : t))
-        : threads.filter((t) => t.id !== threadId)
-      const event = newEvent('comment.deleted', actor, page.projectId, {
-        pageId: page.id,
-        threadId,
-      })
-      await this.save(page, raw, next, actor, [event])
+      if (remaining) this.saveThread(remaining, current)
+      else this.host.orm.delete(schema.threads).where(eq(schema.threads.id, threadId)).run()
+      if (!remaining) {
+        this.host.orm.delete(schema.messages).where(eq(schema.messages.threadId, threadId)).run()
+      }
+      emit(newEvent('comment.deleted', actor, page.projectId, { pageId: page.id, threadId }))
       return { threadRemoved: remaining === null }
     })
   }
 
-  reopen(threadId: string, actor: string): Promise<Thread> {
-    return this.update(threadId, actor, (current, page) => {
+  reopen(threadId: string, actor: string): Thread {
+    return this.update(threadId, (current, page) => {
       if (current.status !== 'resolved') return { thread: current, events: [] }
       return {
         thread: { ...current, status: 'open' },
@@ -194,8 +235,8 @@ export class ThreadService {
     })
   }
 
-  resolve(threadId: string, actor: string): Promise<Thread> {
-    return this.update(threadId, actor, (current, page) => {
+  resolve(threadId: string, actor: string): Thread {
+    return this.update(threadId, (current, page) => {
       if (current.status === 'resolved') return { thread: current, events: [] }
       return {
         thread: { ...current, status: 'resolved' },
@@ -206,51 +247,84 @@ export class ThreadService {
     })
   }
 
-  adoptAuthor(from: string, to: string): Promise<number> {
-    return this.host.serial(async () => {
-      let files = 0
-      for (const page of this.host.allPages()) {
-        const { raw, threads } = await this.load(page)
-        if (!threads.some((thread) => thread.messages.some((m) => m.author === from))) continue
-        const rewritten = threads.map((thread) => ({
-          ...thread,
-          messages: thread.messages.map((m) => (m.author === from ? { ...m, author: to } : m)),
-        }))
-        await this.save(page, raw, rewritten, to, [])
-        files += 1
+  private row(threadId: string): ThreadRow {
+    const row = this.host.orm
+      .select()
+      .from(schema.threads)
+      .where(eq(schema.threads.id, threadId))
+      .get()
+    if (!row) throw new StoreError('not_found', 'Thread not found')
+    return row
+  }
+
+  private attach(rows: readonly ThreadRow[]): Thread[] {
+    if (rows.length === 0) return []
+    const messages = this.host.orm
+      .select()
+      .from(schema.messages)
+      .where(
+        inArray(
+          schema.messages.threadId,
+          rows.map((row) => row.id),
+        ),
+      )
+      .orderBy(schema.messages.at, schema.messages.id)
+      .all()
+    return rows.map((row) =>
+      threadOf(
+        row,
+        messages.filter((m) => m.threadId === row.id),
+      ),
+    )
+  }
+
+  private saveMessages(
+    threadId: string,
+    before: readonly Message[],
+    after: readonly Message[],
+  ): void {
+    const keep = new Set(after.map((m) => m.id))
+    const gone = before.filter((m) => !keep.has(m.id)).map((m) => m.id)
+    if (gone.length) {
+      this.host.orm.delete(schema.messages).where(inArray(schema.messages.id, gone)).run()
+    }
+    const known = new Map(before.map((m) => [m.id, m]))
+    for (const message of after) {
+      const previous = known.get(message.id)
+      const row = {
+        id: message.id,
+        threadId,
+        author: message.author,
+        body: message.body,
+        at: message.at,
+        editedAt: message.editedAt ?? null,
       }
-      return files
-    })
-  }
-
-  private async load(page: StoredPageSummary): Promise<{ raw: string | null; threads: Thread[] }> {
-    const raw = await this.host.readFile(threadsPathFor(page.path))
-    return { raw, threads: parseThreads(raw) }
-  }
-
-  private async save(
-    page: StoredPageSummary,
-    raw: string | null,
-    threads: Thread[],
-    actor: string,
-    events: StoreEvent[],
-  ): Promise<void> {
-    await this.host.commit(threadsPathFor(page.path), raw, serializeThreads(threads), actor, events)
-    this.host.orm.transaction((tx) => {
-      tx.delete(schema.threads).where(eq(schema.threads.pageId, page.id)).run()
-      for (const t of threads) {
-        tx.insert(schema.threads)
-          .values({ id: t.id, pageId: page.id, projectId: page.projectId, status: t.status })
+      if (!previous) this.host.orm.insert(schema.messages).values(row).run()
+      else if (previous.body !== message.body || previous.editedAt !== message.editedAt) {
+        this.host.orm
+          .update(schema.messages)
+          .set(row)
+          .where(eq(schema.messages.id, message.id))
           .run()
       }
-    })
-    this.host.indexed(page, threads)
+    }
+  }
+
+  private saveThread(next: Thread, before: Thread): void {
+    if (next.status !== before.status || next.to.join('\n') !== before.to.join('\n')) {
+      this.host.orm
+        .update(schema.threads)
+        .set({ status: next.status, recipients: next.to })
+        .where(eq(schema.threads.id, next.id))
+        .run()
+    }
+    this.saveMessages(next.id, before.messages, next.messages)
   }
 
   private addressed(
     handles: readonly string[],
     actor: string,
-    page: StoredPageSummary,
+    page: PageSummary,
     threadId: string,
     body: string,
   ): StoreEvent[] {
@@ -263,35 +337,18 @@ export class ThreadService {
     )
   }
 
-  private pageOf(threadId: string): StoredPageSummary {
-    const row = this.host.orm
-      .select()
-      .from(schema.threads)
-      .where(eq(schema.threads.id, threadId))
-      .get()
-    if (!row) throw new StoreError('not_found', 'Thread not found')
-    return this.host.pageRow(row.pageId)
-  }
-
   private update(
     threadId: string,
-    actor: string,
-    change: (thread: Thread, page: StoredPageSummary) => { thread: Thread; events: StoreEvent[] },
-  ): Promise<Thread> {
-    return this.host.serial(async () => {
-      const page = this.pageOf(threadId)
-      const { raw, threads } = await this.load(page)
-      const current = threads.find((t) => t.id === threadId)
-      if (!current) throw new StoreError('not_found', 'Thread not found')
+    change: (thread: Thread, page: PageSummary) => { thread: Thread; events: StoreEvent[] },
+  ): Thread {
+    return this.host.write((emit) => {
+      const row = this.row(threadId)
+      const page = this.host.pageRow(row.pageId)
+      const current = this.attach([row])[0]!
       const { thread, events } = change(current, page)
       if (events.length === 0) return current
-      await this.save(
-        page,
-        raw,
-        threads.map((t) => (t.id === threadId ? thread : t)),
-        actor,
-        events,
-      )
+      this.saveThread(thread, current)
+      for (const event of events) emit(event)
       return thread
     })
   }

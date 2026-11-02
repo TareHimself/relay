@@ -1,13 +1,8 @@
-import Database from 'better-sqlite3'
-import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { adminClient, cleanupStores, client, json, tempStore } from '../test-support'
-import { RelayStore } from './relay-store'
 import { MARK_END, MARK_START, matchExpression } from './search'
 
 afterEach(cleanupStores)
-
-const topDirOf = (store: RelayStore) => (store as unknown as { dataDir: string }).dataDir
 
 describe('matchExpression', () => {
   it('turns words into quoted terms with a prefix on the last one', () => {
@@ -127,28 +122,23 @@ describe('search index', () => {
     expect(store.search.query({ query: 'review' })).toEqual([])
   })
 
-  it('is rebuilt from the files when the index is empty', async () => {
-    const { store, jobs, thread } = await setup()
-    const dir = topDirOf(store)
-    store.close()
-    const db = new Database(join(dir, 'db', 'state.db'))
-    db.exec('DELETE FROM search_index')
-    db.close()
+  it('falls back to substring matching for parts of a word', async () => {
+    const { store, alpha } = await setup()
+    const page = store.createPage(alpha.id, 'Hooks', 'Calls useDocSync on mount.', 'tare')
+    expect(store.search.query({ query: 'DocSync' }).map((hit) => hit.id)).toEqual([page.id])
+    expect(store.search.query({ query: 'qz' })).toEqual([])
+  })
 
-    const reopened = await RelayStore.open(dir)
-    try {
-      expect(reopened.search.query({ query: 'stealing' })[0]).toMatchObject({
-        kind: 'page',
-        id: jobs.id,
-      })
-      expect(reopened.search.query({ query: 'review' })[0]).toMatchObject({
-        kind: 'thread',
-        id: thread.id,
-      })
-      expect(reopened.search.query({ query: 'kitchen' })[0]).toMatchObject({ kind: 'project' })
-    } finally {
-      reopened.close()
-    }
+  it('stays in step through a rename and a delete', async () => {
+    const { store, jobs, thread } = await setup()
+    store.renamePage(jobs.id, 'Fibers', undefined, 'tare')
+    expect(store.search.query({ query: 'schedul' })[0]).toMatchObject({
+      id: thread.id,
+      title: 'Fibers',
+    })
+    store.deletePage(jobs.id, undefined, 'tare')
+    expect(store.search.query({ query: 'stealing' })).toEqual([])
+    expect(store.search.query({ query: 'schedul' })).toEqual([])
   })
 
   it('returns nothing for an empty or symbols-only query', async () => {

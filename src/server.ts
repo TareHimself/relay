@@ -4,7 +4,44 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './http/app'
 import { parseInterval, restoreIfFresh, scheduleBackups } from './store/backup'
+import { DEFAULT_THIN, thinHistory } from './store/history'
 import { RelayStore } from './store/relay-store'
+
+const DAY_MS = 86_400_000
+
+function days(value: string | undefined, fallback: number): number {
+  const parsed = Number(value)
+  return value && Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
+export function scheduleThinning(
+  store: RelayStore,
+  env: NodeJS.ProcessEnv,
+  log: (line: string) => void,
+): { stop: () => void } {
+  const options = {
+    keepAllDays: days(env.HISTORY_KEEP_ALL_DAYS, DEFAULT_THIN.keepAllDays),
+    keepDailyDays: days(env.HISTORY_KEEP_DAILY_DAYS, DEFAULT_THIN.keepDailyDays),
+  }
+  const run = () => {
+    try {
+      const { deleted } = thinHistory(store.database, options)
+      if (deleted > 0) log(`History thinned: removed ${deleted} old autosave versions`)
+    } catch (error) {
+      log(`History thinning failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  const first = setTimeout(run, 60_000)
+  const timer = setInterval(run, DAY_MS)
+  first.unref()
+  timer.unref()
+  return {
+    stop: () => {
+      clearTimeout(first)
+      clearInterval(timer)
+    },
+  }
+}
 
 const EXAMPLE_PASSWORD = 'change-me-please'
 
@@ -24,7 +61,6 @@ export async function bootstrapAdminFromEnv(store: RelayStore, env: AdminEnv): P
     displayName: env.ADMIN_NAME || undefined,
     password: env.ADMIN_PASSWORD,
   })
-  await store.syncMailmap()
   return true
 }
 
@@ -32,7 +68,10 @@ export async function startServer(env: NodeJS.ProcessEnv = process.env): Promise
   const dataDir = env.DATA_DIR ?? './data'
   const every = env.BACKUP_EVERY ? parseInterval(env.BACKUP_EVERY) : null
   await restoreIfFresh(env.RESTORE_FROM, dataDir, (line) => console.log(line))
-  const store = await RelayStore.open(dataDir, { publicUrl: env.PUBLIC_URL })
+  const store = await RelayStore.open(dataDir, {
+    publicUrl: env.PUBLIC_URL,
+    log: (line) => console.log(line),
+  })
   const created = await bootstrapAdminFromEnv(store, env)
   const admin = store.accounts.admin()
   if (!admin) {
@@ -61,7 +100,9 @@ export async function startServer(env: NodeJS.ProcessEnv = process.env): Promise
       })
     : null
   if (backups) console.log(`Backups every ${env.BACKUP_EVERY} to ${resolve(dataDir, 'backups')}`)
+  const thinning = scheduleThinning(store, env, (line) => console.log(line))
   const shutdown = () => {
+    thinning.stop()
     backups?.stop()
     server.close()
     store.close()

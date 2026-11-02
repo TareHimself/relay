@@ -6,7 +6,14 @@ import {
   type QueryClient,
 } from '@tanstack/react-query'
 import { z } from 'zod'
-import { pageSchema, pageSummarySchema, projectSchema, type Project } from '@shared/pages'
+import {
+  historyEntrySchema,
+  pageSchema,
+  pageSummarySchema,
+  pageVersionSchema,
+  projectSchema,
+  type Project,
+} from '@shared/pages'
 import type { PageInput, ProjectInput, ReplyInput, SaveInput, ThreadInput } from '@shared/requests'
 import { searchHitSchema } from '@shared/search'
 import { threadSchema, type Thread } from '@shared/threads'
@@ -120,17 +127,6 @@ export function useCreatePage(projectId: string) {
   })
 }
 
-const historyEntrySchema = z.object({
-  hash: z.string(),
-  author: z.string(),
-  handle: z.string(),
-  date: z.string(),
-  subject: z.string(),
-})
-export type HistoryEntry = z.infer<typeof historyEntrySchema>
-
-const versionSchema = z.object({ hash: z.string(), body: z.string() })
-
 export function useHistory(pageId: string) {
   return useQuery({
     queryKey: keys.history(pageId),
@@ -138,11 +134,11 @@ export function useHistory(pageId: string) {
   })
 }
 
-export function useVersion(pageId: string, hash: string | null) {
+export function useVersion(pageId: string, versionId: string | null) {
   return useQuery({
-    queryKey: keys.version(pageId, hash ?? ''),
-    queryFn: () => http.get(`/pages/${pageId}/versions/${hash}`, versionSchema),
-    enabled: hash !== null,
+    queryKey: keys.version(pageId, versionId ?? ''),
+    queryFn: () => http.get(`/pages/${pageId}/versions/${versionId}`, pageVersionSchema),
+    enabled: versionId !== null,
     staleTime: Infinity,
   })
 }
@@ -150,7 +146,7 @@ export function useVersion(pageId: string, hash: string | null) {
 export function useRestoreVersion(pageId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { hash: string; ifRevision: string }) =>
+    mutationFn: (input: { versionId: string; ifRevision: string }) =>
       http.post(`/pages/${pageId}/restore`, pageSchema, input),
     onSuccess: (page) => {
       queryClient.setQueryData(keys.page(pageId), page)

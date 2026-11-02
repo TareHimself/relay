@@ -50,7 +50,6 @@ describe('authentication', () => {
     })
     expect((await agent.get('/api/tokens')).status).toBe(403)
     expect((await agent.send('POST', '/api/tokens', { name: 'other' })).status).toBe(403)
-    expect((await agent.get('/api/problems')).status).toBe(403)
   })
 
   it('lists tokens without secrets and revokes them', async () => {
@@ -82,7 +81,7 @@ describe('scopes and project restriction', () => {
     )
     expect(edited.body).toContain('## Risks\n\nnew risks\n')
     const history = await json(await agent.get(`/api/pages/${page.id}/history`))
-    expect(history[0].author).toBe('claude')
+    expect(history[0].actor).toBe('claude')
   })
 
   it('blocks writes for read-only tokens but allows reads', async () => {
@@ -204,18 +203,18 @@ describe('page reads and diffs', () => {
     expect(stale.body).toContain('old goals')
   })
 
-  it('diffs two commits of a page', async () => {
+  it('diffs two versions of a page', async () => {
     const { admin, page } = await setup()
     await admin.send('PATCH', `/api/pages/${page.id}`, {
       edits: [{ find: 'old goals', replace: 'shiny goals' }],
     })
     const history = await json(await admin.get(`/api/pages/${page.id}/history`))
     const diff = await json(
-      await admin.get(`/api/pages/${page.id}/diff?from=${history[1].hash}&to=${history[0].hash}`),
+      await admin.get(`/api/pages/${page.id}/diff?from=${history[1].id}&to=${history[0].id}`),
     )
     expect(diff.diff).toContain('-old goals')
     expect(diff.diff).toContain('+shiny goals')
-    expect((await admin.get(`/api/pages/${page.id}/diff?from=--exec`)).status).toBe(400)
+    expect((await admin.get(`/api/pages/${page.id}/diff?from=--exec`)).status).toBe(404)
   })
 })
 

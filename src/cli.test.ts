@@ -1,15 +1,12 @@
-import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runCli, type CliIo } from './cli'
 import { bootstrapAdminFromEnv } from './server'
 import { cleanupStores, tempStore } from './test-support'
 import { RelayStore } from './store/relay-store'
 
-const exec = promisify(execFile)
 const directories: string[] = []
 
 afterEach(async () => {
@@ -89,61 +86,21 @@ describe('relay CLI', () => {
     expect((await cli(['set-name', 'Tare', 'Belo'], { env })).out).toContain('"Tare Belo"')
     expect((await cli(['admin'], { env })).out).toBe('Admin: Tare Belo (handle: tare)')
     expect((await cli(['set-name'], { env })).code).toBe(1)
-    const mailmap = await exec('git', [
-      '-C',
-      join(created.directory, 'projects'),
-      'config',
-      'mailmap.file',
-    ])
-    expect(await fs.readFile(mailmap.stdout.trim(), 'utf8')).toBe('Tare Belo <tare@relay.local>\n')
   })
 
-  it('adopts data authored by the old local identity', async () => {
+  it('checks the database and thins history', async () => {
     const directory = await fs.mkdtemp(join(tmpdir(), 'relay-cli-'))
     directories.push(directory)
-    let store = await RelayStore.open(directory)
-    const project = await store.createProject('Alpha', '', 'local')
-    const page = await store.createPage(project.id, 'Plan', 'Ship the store', 'local')
-    const thread = await store.threads.create(
-      page.id,
-      'Realistic?',
-      { anchorText: 'Ship' },
-      'local',
-    )
-    await store.threads.reply(thread.id, 'From an agent', 'claude')
-    await store.accounts.bootstrapAdmin({
-      handle: 'tare',
-      displayName: 'Tare',
-      password: 'pw pw pw pw',
-    })
+    const store = await RelayStore.open(directory)
+    const project = store.createProject('Alpha', '', 'tare')
+    store.createPage(project.id, 'Plan', 'text', 'tare')
     store.close()
-
-    const result = await cli(['adopt-local'], { env: { DATA_DIR: directory } })
-    expect(result.code).toBe(0)
-    expect(result.out).toContain('1 page(s)')
-
-    store = await RelayStore.open(directory)
-    const [adopted] = await store.threads.listForPage(page.id)
-    expect(adopted?.messages.map((m) => m.author)).toEqual(['tare', 'claude'])
-    expect(store.listEvents().every((event) => event.actor !== 'local')).toBe(true)
-    const history = await store.history(page.id)
-    expect(history.map((h) => [h.author, h.handle])).toEqual([['Tare', 'tare']])
-    store.close()
-
-    for (let reopen = 0; reopen < 3; reopen += 1) {
-      store = await RelayStore.open(directory)
-      expect((await store.history(page.id)).map((h) => h.author)).toEqual(['Tare'])
-      store.close()
-    }
-
-    const again = await cli(['adopt-local'], { env: { DATA_DIR: directory } })
-    expect(again.out).toContain('0 page(s)')
-  })
-
-  it('needs an admin before adopting', async () => {
-    const result = await cli(['adopt-local'])
-    expect(result.code).toBe(1)
-    expect(result.err).toContain('set-password')
+    const env = { DATA_DIR: directory }
+    const check = await cli(['check'], { env })
+    expect(check.code).toBe(0)
+    expect(check.out).toContain('Integrity check ok')
+    expect(check.out).toContain('page_versions')
+    expect((await cli(['thin-history', '--dry-run'], { env })).out).toContain('0 old autosave')
   })
 
   it('prints help and rejects unknown commands', async () => {

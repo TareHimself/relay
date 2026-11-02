@@ -1,10 +1,10 @@
 # Relay
 
-A self-hosted, git-backed markdown store where people and AI agents edit documents together. Pages are plain markdown files in a git repository, with anchored comment threads, a REST API, an MCP server for agents, and a React UI.
+A self-hosted markdown store where people and AI agents edit documents together. Pages are plain markdown in one SQLite file, with full version history, anchored comment threads, a REST API, an MCP server for agents, and a React UI.
 
 ## Quick start
 
-Requires Node 22+, pnpm and git.
+Requires Node 22+ and pnpm.
 
 ```sh
 pnpm install
@@ -26,7 +26,7 @@ docker compose up -d --build
 
 The port is published on `127.0.0.1` only. Put a TLS-terminating reverse proxy in front for anything beyond your own machine, and set `TRUST_PROXY=1` when it sets `X-Forwarded-For` / `X-Forwarded-Proto`. Set `BIND=0.0.0.0` only if you understand the exposure.
 
-Relay's data (`DATA_DIR` inside the container) lives in the named Docker volume `relay_relay-data`, not a bind mount: git runs about 100x faster on a volume than on a Windows bind mount. The optional Tailscale sidecar below keeps its state in `./data/tailscale`.
+Relay's data (`DATA_DIR` inside the container) lives in the named Docker volume `relay_relay-data`, not a bind mount, because SQLite is much faster on a volume than on a Windows bind mount. The optional Tailscale sidecar below keeps its state in `./data/tailscale`.
 
 #### Backup and restore
 
@@ -45,7 +45,7 @@ docker compose up -d
 
 With the server stopped, the CLI does the same: `relay backup [file.tgz]` and `relay restore <file.tgz> [--replace]` (`--replace` moves the existing data to `replaced-<timestamp>/` inside the data directory first). In Docker: `docker compose stop relay`, then `docker compose run --rm relay relay backup /data/backups/manual.tgz`.
 
-Backups from older Relay versions restore into newer ones. The archive's `manifest.json` records a format number and the Relay version that wrote it; restore rejects a format it does not know. The database inside is the raw `state.db`, so an older schema is brought up to date by the normal Drizzle migrations on the next start, and a backup made by a newer Relay is refused with a message to update first. When changing Relay: schema changes need only a new migration in `drizzle/`; bump `BACKUP_FORMAT` in `src/store/backup.ts` only when the archive layout itself changes.
+Backups from older Relay versions restore into newer ones, including format 1 archives that carry a git bundle: their pages are imported on the next start. The archive's `manifest.json` records a format number and the Relay version that wrote it; restore rejects a format it does not know. The database inside is a `VACUUM INTO` copy of `state.db`, so an older schema is brought up to date by the normal Drizzle migrations on the next start, and a backup made by a newer Relay is refused with a message to update first. When changing Relay: schema changes need only a new migration in `drizzle/`; bump `BACKUP_FORMAT` in `src/store/backup.ts` only when the archive layout itself changes.
 
 #### Tailscale instead of a public port
 
@@ -64,7 +64,7 @@ Without `TS_AUTHKEY`, the container falls back to an interactive login link in `
 
 | Variable         | Default     | Purpose                                                                                       |
 | ---------------- | ----------- | --------------------------------------------------------------------------------------------- |
-| `DATA_DIR`       | `./data`    | Parent of `projects/` (git repo) and `db/` (`state.db`) — see [Data](#data)                   |
+| `DATA_DIR`       | `./data`    | Holds `db/state.db` and `backups/`, see [Data](#data)                                         |
 | `PORT`           | `47821`     | Listen port                                                                                   |
 | `HOST`           | `127.0.0.1` | Listen address (the Docker image uses `0.0.0.0` inside)                                       |
 | `ADMIN_PASSWORD` | -           | Creates the admin on first start                                                              |
@@ -78,22 +78,19 @@ Without `TS_AUTHKEY`, the container falls back to an interactive login link in `
 
 ## Data
 
-`DATA_DIR` holds two sibling folders, both under the one bind-mounted directory:
+Everything lives in one SQLite file, `DATA_DIR/db/state.db`: pages, versions, comment threads, projects, accounts, API tokens, the event log and the search index. Back it up with the backup commands above rather than copying the file while the server runs.
 
-- `projects/` — the git repository: `<project>/project.yaml`, `<project>/<slug>.md` for pages, `<slug>.threads.json` for comments.
-- `db/` — `state.db` (SQLite, not in git): the admin account, sessions, API tokens and the event log.
+Every save writes one transaction: the page row, a full snapshot in `page_versions` and the event. Saves by the same person within a few minutes merge into one version. Old history thins itself nightly: every version is kept for 7 days, then the last one per person per day until 90 days, then one per week. Creates, renames, tag changes, restores, deletes and the newest version are never removed. Change the windows with `HISTORY_KEEP_ALL_DAYS` and `HISTORY_KEEP_DAILY_DAYS`. Run `relay thin-history --dry-run` to see what would go, and `relay check` for an integrity check and table sizes.
 
-Keeping `db/` outside the git repo means it can never end up in a commit, by construction, rather than by relying on a `.gitignore` entry. **Back up the whole `DATA_DIR`** (both subfolders; with Docker, the volume).
+Deleting a page is a soft delete: the rows stay, so an administrator can recover it.
 
-An install from before this split (a flat `DATA_DIR` with the git repo and `state.db` as direct siblings) is migrated automatically and non-destructively the first time it starts under the new layout: everything moves into `projects/` except `state.db*`, which moves into `db/`.
-
-A page file is YAML frontmatter (`id`, `title`, `tags`) followed by the markdown body. The API and MCP tools never expose the frontmatter: pages come back as structured fields plus a plain markdown `body`.
+Older Relay versions kept pages in a git repository at `DATA_DIR/projects`. If that folder exists on start and no pages have been imported, Relay imports the pages, history and comments, then renames the folder to `projects.imported-<timestamp>`. Delete it once you are happy with the result. The import needs `git`, which the Docker image still includes.
 
 ## Page API
 
 - Writes accept only the markdown body. A body that starts with Relay frontmatter (`id`, `title` or `tags` keys) is rejected.
 - `edit_page` takes `edits` (`{ find, replace }` or `{ section, replace }`) **or** `body` (replace the whole body, keeping the id, history and threads). Pass `ifRevision` to refuse the change if the page moved.
-- `rename_page` changes a page's title; its file is renamed to match (history and comment threads move with it). `rename_project` changes a project's display name without moving anything; `set_project_description` changes its description.
+- `rename_page` changes a page's title (its id, history and comment threads stay). `rename_project` changes a project's display name; `set_project_description` changes its description.
 - `read_page` returns `body` and an `outline` of headings; `includeBody: false` returns metadata and outline only.
 - `create_page`, `edit_page`, `set_tags` and `rename_page` return metadata only (`id`, `url`, `revision`, `updatedAt`, `tags`) unless `includeBody` is set. `url` is a short link (`/doc/<id>`, page ids are unique on their own) that the web app resolves and forwards to the page's real location — relative by default, so it's correct under any host Relay is reachable at; set `PUBLIC_URL` to get an absolute, clickable link instead (worth it once Relay has one settled address, e.g. behind Tailscale).
 
@@ -107,7 +104,7 @@ Export: a page downloads as `.md` from its menu (`GET /api/pages/:id/export`), a
 
 ## CLI
 
-`relay <command>` (`node dist/index.js <command>`): `serve` (default), `set-password`, `set-name`, `admin`, `watch`, `tidy-history`, `adopt-local`, `help`.
+`relay <command>` (`node dist/index.js <command>`): `serve` (default), `set-password`, `set-name`, `admin`, `watch`, `backup`, `restore`, `thin-history`, `check`, `import-git`, `help`.
 
 ## Security notes
 

@@ -1,4 +1,4 @@
-FROM node:22-slim AS build
+FROM node:22-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS build
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 make g++ \
  && rm -rf /var/lib/apt/lists/* \
@@ -14,7 +14,7 @@ COPY web web
 ENV CI=true
 RUN pnpm build && pnpm prune --prod
 
-FROM node:22-slim
+FROM node:22-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
@@ -27,9 +27,12 @@ COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/dist dist
 COPY --from=build /app/drizzle drizzle
 COPY --from=build /app/web/dist web/dist
+COPY docker-entrypoint.sh /usr/local/bin/relay-entrypoint
+RUN chmod +x /usr/local/bin/relay-entrypoint
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=47821 DATA_DIR=/data
 VOLUME /data
 EXPOSE 47821
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
   CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/api/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+ENTRYPOINT ["relay-entrypoint"]
 CMD ["node", "dist/index.js"]

@@ -16,6 +16,8 @@ services:
       RESTORE_FROM: ${RESTORE_FROM:-}
       BACKUP_EVERY: ${BACKUP_EVERY:-}
       BACKUP_KEEP: ${BACKUP_KEEP:-}
+      HISTORY_KEEP_ALL_DAYS: ${HISTORY_KEEP_ALL_DAYS:-}
+      HISTORY_KEEP_DAILY_DAYS: ${HISTORY_KEEP_DAILY_DAYS:-}
 
   tailscale:
     image: tailscale/tailscale:stable

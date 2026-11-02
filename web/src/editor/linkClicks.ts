@@ -51,9 +51,9 @@ export function linkUrlAt(view: EditorView, pos: number): string | null {
 }
 
 export function internalPath(href: string): string | null {
-  if (href.startsWith('/') || href.startsWith('#')) return href
+  if (href.startsWith('#')) return href
   try {
-    const url = new URL(href)
+    const url = new URL(href, window.location.href)
     if (url.origin === window.location.origin || DOC_PATH.test(url.pathname)) {
       return `${url.pathname}${url.search}${url.hash}`
     }

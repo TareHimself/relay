@@ -63,6 +63,7 @@ describe('backup route', () => {
     const tarball = gunzipSync(bytes).toString('latin1')
     expect(tarball).toContain('manifest.json')
     expect(tarball).toContain('"pages": 1')
-    expect(tarball).toContain('repo.bundle')
+    expect(tarball).toContain('state.db')
+    expect(tarball).not.toContain('repo.bundle')
   })
 })

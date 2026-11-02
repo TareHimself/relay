@@ -10,6 +10,7 @@ import { mcpHandler } from '../mcp/handler'
 import {
   editInput,
   eventsQuery,
+  historyQuery,
   pageInput,
   projectDescriptionInput,
   projectInput,
@@ -174,10 +175,6 @@ export function createApp(store: RelayStore) {
     workspace(c).revokeSession(c.req.param('sessionId'))
     return c.json({ ok: true })
   })
-  api.get('/problems', (c) => {
-    workspace(c).access.admin()
-    return c.json(store.listProblems())
-  })
   api.get('/backup', (c) => {
     workspace(c).access.admin()
     return withBackupLock(store, async () => {
@@ -301,24 +298,22 @@ export function createApp(store: RelayStore) {
     const { title, ifRevision } = renamePageInput.parse(await c.req.json())
     return c.json(await workspace(c).renamePage(c.req.param('pageId'), title, ifRevision))
   })
-  api.get('/pages/:pageId/history', async (c) =>
-    c.json(await workspace(c).history(c.req.param('pageId'))),
+  api.get('/pages/:pageId/history', (c) =>
+    c.json(workspace(c).history(c.req.param('pageId'), historyQuery.parse(c.req.query()))),
   )
-  api.get('/pages/:pageId/versions/:hash', async (c) =>
-    c.json(await workspace(c).version(c.req.param('pageId'), c.req.param('hash'))),
+  api.get('/pages/:pageId/versions/:versionId', (c) =>
+    c.json(workspace(c).version(c.req.param('pageId'), c.req.param('versionId'))),
   )
-  api.delete('/pages/:pageId', async (c) => {
-    await workspace(c).deletePage(c.req.param('pageId'), c.req.query('ifRevision'))
+  api.delete('/pages/:pageId', (c) => {
+    workspace(c).deletePage(c.req.param('pageId'), c.req.query('ifRevision'))
     return c.json({ ok: true })
   })
   api.post('/pages/:pageId/restore', async (c) => {
-    const { hash, ifRevision } = restoreInput.parse(await c.req.json())
-    return c.json(await workspace(c).restore(c.req.param('pageId'), hash, ifRevision))
+    const { versionId, ifRevision } = restoreInput.parse(await c.req.json())
+    return c.json(workspace(c).restore(c.req.param('pageId'), versionId, ifRevision))
   })
-  api.get('/pages/:pageId/diff', async (c) =>
-    c.json(
-      await workspace(c).diff(c.req.param('pageId'), c.req.query('from') ?? '', c.req.query('to')),
-    ),
+  api.get('/pages/:pageId/diff', (c) =>
+    c.json(workspace(c).diff(c.req.param('pageId'), c.req.query('from') ?? '', c.req.query('to'))),
   )
   api.get('/pages/:pageId/threads', async (c) =>
     c.json(await workspace(c).listPageThreads(c.req.param('pageId'))),

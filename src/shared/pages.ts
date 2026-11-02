@@ -17,6 +17,23 @@ export const pageSummarySchema = z.object({
 })
 export const pageSchema = pageSummarySchema.extend({ body: z.string() })
 
+export const versionKindSchema = z.enum(['create', 'edit', 'rename', 'tags', 'restore', 'delete'])
+export const historyEntrySchema = z.object({
+  id: z.string(),
+  kind: versionKindSchema,
+  actor: z.string(),
+  summary: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export const pageVersionSchema = historyEntrySchema.extend({
+  pageId: z.string(),
+  title: z.string(),
+  tags: z.array(z.string()),
+  body: z.string(),
+  revision: z.string(),
+})
+
 export function docHref(pageId: string): string {
   return `/doc/${pageId}`
 }
@@ -24,16 +41,9 @@ export function docHref(pageId: string): string {
 export type Project = z.infer<typeof projectSchema>
 export type PageSummary = z.infer<typeof pageSummarySchema>
 export type Page = z.infer<typeof pageSchema>
-
-// Internal-only: the store's own representation, with the git file path
-// attached. Never sent over the wire - callers get `url` instead, which
-// works as a link; `path` is meaningless off the filesystem/git repo.
-export interface StoredPageSummary extends PageSummary {
-  path: string
-}
-export interface StoredPage extends Page {
-  path: string
-}
+export type VersionKind = z.infer<typeof versionKindSchema>
+export type HistoryEntry = z.infer<typeof historyEntrySchema>
+export type PageVersion = z.infer<typeof pageVersionSchema>
 
 export interface OutlineEntry {
   text: string
@@ -51,9 +61,4 @@ export interface StoreEvent {
   threadId?: string | undefined
   revision?: string | undefined
   summary?: string | undefined
-}
-
-export interface IndexProblem {
-  path: string
-  reason: string
 }

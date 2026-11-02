@@ -66,7 +66,7 @@ function TokenForm({ onClose, onCreated }: Omit<CreateTokenDialogProps, 'opened'
         <TextInput
           data-autofocus
           label="Name"
-          description="Also the agent's @handle and the author on its commits"
+          description="Also the agent's @handle and the author of its edits"
           placeholder="review-bot"
           value={name}
           error={nameError ?? (create.error ? errorMessage(create.error) : undefined)}

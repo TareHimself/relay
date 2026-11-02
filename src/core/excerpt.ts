@@ -1,8 +1,11 @@
 import { splitFrontmatter } from '../shared/frontmatter'
 
+const SCAN_LENGTH = 4000
+
 export function excerptOf(markdown: string, maxLength = 200): string {
   const text = splitFrontmatter(markdown)
-    .body.replace(/```[\s\S]*?(```|$)/g, ' ')
+    .body.slice(0, SCAN_LENGTH)
+    .replace(/```[\s\S]*?(```|$)/g, ' ')
     .replace(/~~~[\s\S]*?(~~~|$)/g, ' ')
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')

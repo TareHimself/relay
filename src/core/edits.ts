@@ -4,8 +4,16 @@ import { replaceSection } from './sections'
 
 export type TextEdit = { find: string; replace: string } | { section: string; replace: string }
 
-export function revisionOf(markdown: string): string {
-  return createHash('sha256').update(markdown).digest('hex')
+export interface PageContent {
+  title: string
+  tags: readonly string[]
+  body: string
+}
+
+export function revisionOf({ title, tags, body }: PageContent): string {
+  return createHash('sha256')
+    .update(JSON.stringify([title, tags, body]))
+    .digest('hex')
 }
 
 export function locateUnique(text: string, find: string): number {

@@ -21,6 +21,17 @@ describe('normalizeLink', () => {
     expect(normalizeLink('DATA:text/html,x')).toBeNull()
     expect(normalizeLink('   ')).toBeNull()
   })
+
+  it('allows only web and mail links, and refuses other hosts without a scheme', () => {
+    expect(normalizeLink('mailto:a@b.co')).toBe('mailto:a@b.co')
+    expect(normalizeLink('localhost:3000/a')).toBe('https://localhost:3000/a')
+    expect(normalizeLink('ms-msdt:/id PCWDiagnostic')).toBeNull()
+    expect(normalizeLink('vscode://file/C:/x')).toBeNull()
+    expect(normalizeLink('file:///etc/hosts')).toBeNull()
+    expect(normalizeLink('//evil.example/login')).toBeNull()
+    expect(normalizeLink('/\\evil.example')).toBeNull()
+    expect(normalizeLink('\\\\evil.example')).toBeNull()
+  })
 })
 
 describe('linkAt', () => {

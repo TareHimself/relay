@@ -1,13 +1,9 @@
-import { execFile } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
-import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 import { RelayStore } from './relay-store'
 
-const exec = promisify(execFile)
 const directories: string[] = []
 
 afterEach(async () => {
@@ -42,7 +38,7 @@ describe('RelayStore', () => {
     }
   })
 
-  it('runs a comment thread from anchored question to resolution and rebuilds it from files', async () => {
+  it('runs a comment thread from anchored question to resolution and keeps it across a restart', async () => {
     const directory = await tempDirectory()
     let store = await RelayStore.open(directory)
     const project = await store.createProject('Project Alpha', '', 'tare')
@@ -60,7 +56,7 @@ describe('RelayStore', () => {
       'tare',
     )
     expect(thread.anchor).toMatchObject({ exact: 'B-tree', suffix: ' for lookups\n' })
-    await expect(
+    await expect(async () =>
       store.threads.create(page.id, 'Missing', { anchorText: 'skip list' }, 'tare'),
     ).rejects.toMatchObject({ code: 'conflict' })
     expect(await store.threads.list({ to: 'claude' })).toHaveLength(1)
@@ -72,7 +68,7 @@ describe('RelayStore', () => {
     expect(await store.threads.list({ status: 'answered' })).toHaveLength(1)
 
     const messageId = answered.messages[1]?.id ?? ''
-    await expect(
+    await expect(async () =>
       store.threads.editMessage(thread.id, messageId, 'Hijack', 'tare'),
     ).rejects.toMatchObject({
       code: 'forbidden',
@@ -104,22 +100,7 @@ describe('RelayStore', () => {
       /^@claude: /,
     )
 
-    const history = await store.history(page.id)
-    expect(history).toHaveLength(1)
-    const { stdout } = await exec('git', [
-      '-C',
-      join(directory, 'projects'),
-      'log',
-      '--format=%s',
-      '-5',
-    ])
-    expect(stdout.trim().split('\n')).toEqual([
-      'comment: project-alpha/design-notes.threads.json (tare)',
-      'comment: project-alpha/design-notes.threads.json (Claude)',
-      'comment: project-alpha/design-notes.threads.json (Claude)',
-      'comment: project-alpha/design-notes.threads.json (tare)',
-      'create: project-alpha/design-notes.md (tare)',
-    ])
+    expect(await store.history(page.id)).toHaveLength(1)
     store.close()
 
     store = await RelayStore.open(directory)
@@ -127,40 +108,6 @@ describe('RelayStore', () => {
     expect(restored).toMatchObject({ id: thread.id, status: 'resolved' })
     expect(restored?.messages.map((m) => m.author)).toEqual(['tare', 'Claude'])
     expect(await store.threads.list({ status: 'resolved' })).toHaveLength(1)
-    store.close()
-  })
-
-  it('skips unreadable files at startup and reports them instead of failing', async () => {
-    const directory = await tempDirectory()
-    const write = async (path: string, content: string) => {
-      await fs.mkdir(join(directory, path, '..'), { recursive: true })
-      await fs.writeFile(join(directory, path), content)
-    }
-    const page = (id: string, title: string) => `---\nid: ${id}\ntitle: ${title}\n---\n\nBody\n`
-    await write('good/project.yaml', 'id: p1\nname: Good\n')
-    await write('good/ok.md', page('a1', 'Ok'))
-    await write('good/ok.threads.json', '{ not json')
-    await write('good/no-frontmatter.md', 'just text')
-    await write('good/z-copy.md', page('a1', 'Copy'))
-    await write('broken/project.yaml', 'name: [unclosed')
-
-    const store = await RelayStore.open(directory)
-    expect(store.listProjects().map((p) => p.name)).toEqual(['Good'])
-    expect(store.listPages('p1').map((p) => p.title)).toEqual(['Ok'])
-    expect(
-      store
-        .listProblems()
-        .map((p) => p.path)
-        .sort(),
-    ).toEqual([
-      'broken/project.yaml',
-      'good/no-frontmatter.md',
-      'good/ok.threads.json',
-      'good/z-copy.md',
-    ])
-    await expect(store.threads.create('a1', 'hi', {}, 'tare')).rejects.toMatchObject({
-      code: 'invalid',
-    })
     store.close()
   })
 
@@ -173,7 +120,9 @@ describe('RelayStore', () => {
     const reply = await store.threads.reply(thread.id, 'Second', 'tare')
     const replyId = reply.messages[1]?.id ?? ''
 
-    await expect(store.threads.deleteMessage(thread.id, replyId, 'claude')).rejects.toMatchObject({
+    await expect(async () =>
+      store.threads.deleteMessage(thread.id, replyId, 'claude'),
+    ).rejects.toMatchObject({
       code: 'forbidden',
     })
     expect(await store.threads.deleteMessage(thread.id, replyId, 'tare')).toEqual({
@@ -220,17 +169,17 @@ describe('RelayStore', () => {
       'tare',
     )
     expect(saved.body).toContain('Two')
-    await expect(
+    await expect(async () =>
       store.replacePage(page.id, saved.body + 'x', page.revision, 'tare'),
     ).rejects.toMatchObject({ code: 'conflict' })
-    await expect(
+    await expect(async () =>
       store.replacePage(page.id, '---\nid: x\ntitle: y\n---\n\nsneaky', saved.revision, 'tare'),
     ).rejects.toMatchObject({ code: 'invalid' })
     expect(await store.history(page.id)).toHaveLength(2)
     store.close()
   })
 
-  it('commits guarded edits and preserves their event and commit link after restart', async () => {
+  it('records guarded edits and keeps their history after restart', async () => {
     const directory = await tempDirectory()
     let store = await RelayStore.open(directory)
     const project = await store.createProject('Project Alpha', '', 'tare')
@@ -248,7 +197,7 @@ describe('RelayStore', () => {
       'page.created',
       'page.updated',
     ])
-    await expect(
+    await expect(async () =>
       store.editPage(
         page.id,
         { edits: [{ find: 'Updated text', replace: 'Lost change' }] },
@@ -262,27 +211,8 @@ describe('RelayStore', () => {
     expect((await store.readPage(page.id)).body).toContain('Updated text')
     const history = await store.history(page.id)
     expect(history).toHaveLength(2)
-    expect(history[0]).toMatchObject({
-      author: 'Claude',
-      subject: 'edit: project-alpha/design-notes.md (Claude)',
-    })
-    expect(history[1]?.subject).toBe('create: project-alpha/design-notes.md (tare)')
-    const { stdout: email } = await exec('git', [
-      '-C',
-      join(directory, 'projects'),
-      'log',
-      '-1',
-      '--format=%ae',
-    ])
-    expect(email.trim()).toBe('claude@relay.local')
-    const db = new Database(join(directory, 'db', 'state.db'), { readonly: true })
-    const completed = db
-      .prepare("SELECT commit_hash FROM operations WHERE status = 'complete' ORDER BY id")
-      .all() as { commit_hash: string }[]
-    expect(completed).toHaveLength(3)
-    const { stdout } = await exec('git', ['-C', join(directory, 'projects'), 'rev-parse', 'HEAD'])
-    expect(completed[2]?.commit_hash).toBe(stdout.trim())
-    db.close()
+    expect(history[0]).toMatchObject({ actor: 'Claude', kind: 'edit' })
+    expect(history[1]).toMatchObject({ actor: 'tare', kind: 'create' })
     store.close()
   })
 })

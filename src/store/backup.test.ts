@@ -29,9 +29,6 @@ afterEach(async () => {
   for (const directory of directories.splice(0)) {
     await fs.rm(directory, { recursive: true, force: true })
   }
-  delete process.env.GIT_CONFIG_COUNT
-  delete process.env.GIT_CONFIG_KEY_0
-  delete process.env.GIT_CONFIG_VALUE_0
 })
 
 async function tempDirectory(prefix = 'relay-backup-test-'): Promise<string> {
@@ -55,59 +52,78 @@ async function seeded() {
   await store.editPage(page.id, { body: 'v2' }, page.revision, 'tare')
   const thread = await store.threads.create(page.id, 'Looks wrong', { anchorText: 'v2' }, 'tare')
   const token = store.tokens.create({ name: 'claude', scope: 'write' })
-  await exec('git', [
-    '-C',
-    join(directory, 'projects'),
-    'update-ref',
-    'refs/relay/backup/x',
-    'HEAD',
-  ])
   return { directory, store, project, page, thread, token }
 }
 
-function useDefaultBranch(name: string) {
-  process.env.GIT_CONFIG_COUNT = '1'
-  process.env.GIT_CONFIG_KEY_0 = 'init.defaultBranch'
-  process.env.GIT_CONFIG_VALUE_0 = name
-}
-
 describe('backup and restore', () => {
-  it('round-trips pages, history, threads, tokens and relay refs', async () => {
-    const { directory, store, page, thread, token } = await seeded()
+  it('round-trips pages, history, threads, tokens and accounts', async () => {
+    const { store, page, thread, token } = await seeded()
     const file = join(await tempDirectory(), 'out.tgz')
     const manifest = await writeBackup(store, file)
-    expect(manifest).toMatchObject({ format: 1, hasRepo: true, projects: 1, pages: 1, threads: 1 })
+    expect(manifest).toMatchObject({ format: 2, projects: 1, pages: 1, threads: 1 })
 
     const target = await tempDirectory()
-    useDefaultBranch('master')
-    await exec('git', ['-C', join(directory, 'projects'), 'branch', '-m', 'main'])
-    await writeBackup(store, file)
     expect(await readBackup(file, target)).toMatchObject({ pages: 1 })
 
     const restored = await open(target)
-    const copy = await restored.readPage(page.id)
-    expect(copy.body).toBe('v2\n')
-    expect((await restored.history(page.id)).length).toBe(2)
-    expect((await restored.threads.listForPage(page.id)).map((t) => t.id)).toEqual([thread.id])
+    expect(restored.readPage(page.id).body).toBe('v2\n')
+    expect(restored.history(page.id)).toHaveLength(2)
+    expect(restored.threads.listForPage(page.id).map((t) => t.id)).toEqual([thread.id])
+    expect(restored.search.query({ query: 'wrong' })).toHaveLength(1)
     expect(restored.tokens.authenticate(token.token)?.actor).toBe('claude')
     expect(restored.accounts.hasAdmin()).toBe(true)
-    const branch = await exec('git', ['-C', join(target, 'projects'), 'symbolic-ref', 'HEAD'])
-    expect(branch.stdout.trim()).toBe('refs/heads/main')
-    const refs = await exec('git', ['-C', join(target, 'projects'), 'show-ref'])
-    expect(refs.stdout).toContain('refs/relay/backup/x')
-    expect(existsSync(join(target, 'projects', '.gitignore'))).toBe(true)
     expect((await fs.readdir(target)).filter((n) => n.startsWith('restoring-'))).toEqual([])
   })
 
-  it('backs up and restores a store with no commits yet', async () => {
+  it('backs up and restores an empty store', async () => {
     const directory = await tempDirectory()
     const store = await open(directory)
     const file = join(await tempDirectory(), 'empty.tgz')
-    expect((await writeBackup(store, file)).hasRepo).toBe(false)
+    expect((await writeBackup(store, file)).projects).toBe(0)
     const target = await tempDirectory()
     await readBackup(file, target)
     const restored = await open(target)
     expect(restored.listProjects()).toEqual([])
+  })
+
+  it('imports a format 1 archive that carries a git bundle', async () => {
+    const dbDir = await tempDirectory()
+    const accounts = await RelayStore.open(dbDir)
+    await accounts.accounts.bootstrapAdmin({ handle: 'tare', password: 'test password!' })
+    accounts.close()
+
+    const repo = await tempDirectory()
+    const run = (...args: string[]) =>
+      exec('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=tare@relay.local', ...args])
+    await run('init', '-q')
+    await fs.mkdir(join(repo, 'old'))
+    await fs.writeFile(join(repo, 'old', 'project.yaml'), 'id: p9\nname: Old\ndescription: ""\n')
+    await fs.writeFile(
+      join(repo, 'old', 'note.md'),
+      '---\nid: a9\ntitle: Note\ntags: []\n---\n\nFrom git\n',
+    )
+    await run('add', '.')
+    await run('commit', '-qm', 'create: old/note.md (tare)')
+    const bundle = join(await tempDirectory(), 'repo.bundle')
+    await run('bundle', 'create', bundle, '--all')
+
+    const manifest = { format: 1, relayVersion: '0.1.0', createdAt: '', hasRepo: true }
+    const legacy = join(await tempDirectory(), 'legacy.tgz')
+    const pack = tar.pack()
+    const done = pipeline(pack, createGzip(), createWriteStream(legacy))
+    pack.entry({ name: 'manifest.json' }, JSON.stringify(manifest))
+    pack.entry({ name: 'state.db' }, await fs.readFile(join(dbDir, 'db', 'state.db')))
+    pack.entry({ name: 'repo.bundle' }, await fs.readFile(bundle))
+    pack.finalize()
+    await done
+
+    const target = await tempDirectory()
+    await readBackup(legacy, target)
+    const restored = await open(target)
+    expect(restored.readPage('a9').body).toBe('From git\n')
+    expect(restored.history('a9')).toHaveLength(1)
+    expect(restored.accounts.hasAdmin()).toBe(true)
+    expect(existsSync(join(target, 'projects'))).toBe(false)
   })
 
   it('replaces a stale database left by a failed first start', async () => {
@@ -139,7 +155,7 @@ describe('backup and restore', () => {
     await readBackup(file, target, { replace: true, log: (line) => log.push(line) })
     const aside = (await fs.readdir(target)).find((n) => n.startsWith('replaced-'))
     expect(aside).toBeDefined()
-    expect(existsSync(join(target, aside!, 'projects', '.git'))).toBe(true)
+    expect(existsSync(join(target, aside!, 'db', 'state.db'))).toBe(true)
     expect(log.join('\n')).toContain('Previous data moved to')
     const restored = await open(target)
     expect(restored.listProjects().map((p) => p.name)).toEqual(['Alpha'])
@@ -200,30 +216,15 @@ describe('backup and restore', () => {
     expect(await restoreIfFresh(file, fresh, (l) => log.push(l))).toBe(true)
     expect(log.at(-1)).toContain('Restored from')
     expect(await restoreIfFresh(file, fresh, (l) => log.push(l))).toBe(false)
-    expect(log.at(-1)).toContain('RESTORE_FROM ignored: projects/ already has history')
+    expect(log.at(-1)).toContain('RESTORE_FROM ignored: db/state.db already has an account')
     const restored = await open(fresh)
     expect(restored.listProjects().map((p) => p.name)).toEqual(['Alpha'])
   })
 
-  it('does not mistake a parent repository for history', async () => {
-    const parent = await tempDirectory()
-    await exec('git', ['-C', parent, 'init', '-q'])
-    await fs.writeFile(join(parent, 'a.txt'), 'a')
-    await exec('git', ['-C', parent, 'add', 'a.txt'])
-    await exec('git', [
-      '-C',
-      parent,
-      '-c',
-      'user.name=t',
-      '-c',
-      'user.email=t@x',
-      'commit',
-      '-qm',
-      'a',
-    ])
-    const data = join(parent, 'data')
-    await fs.mkdir(join(data, 'projects'), { recursive: true })
-    expect(await isFreshDataDir(data)).toEqual({ fresh: true })
+  it('treats a leftover git repository as existing data', async () => {
+    const data = await tempDirectory()
+    await fs.mkdir(join(data, 'projects', '.git'), { recursive: true })
+    expect((await isFreshDataDir(data)).fresh).toBe(false)
   })
 
   it('serialises backups per store and prunes old files', async () => {

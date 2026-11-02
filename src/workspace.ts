@@ -6,29 +6,19 @@ import { buildZip } from './core/zip'
 import { markdownSupportSummary } from './shared/markdownSupport'
 import { outlineOf } from './core/sections'
 import type {
+  HistoryEntry,
   OutlineEntry,
   Page,
   PageSummary,
+  PageVersion,
   Project,
-  StoredPage,
-  StoredPageSummary,
   StoreEvent,
 } from './shared/pages'
 import type { Thread, ThreadStatus } from './shared/threads'
 import { searchKindSchema, type SearchHit, type SearchKind } from './shared/search'
 import type { TagCount } from './shared/tags'
-import type { PageChange, PageVersion, RelayStore } from './store/relay-store'
+import type { HistoryQuery, PageChange, RelayStore } from './store/relay-store'
 import type { PageThread } from './store/thread-service'
-
-// path is the store's internal git file path - never useful off the
-// filesystem, so it never crosses into a public response. url is the
-// link a caller actually wants.
-function publicPage({ path: _path, ...page }: StoredPage): Page {
-  return page
-}
-function publicSummary({ path: _path, ...page }: StoredPageSummary): PageSummary {
-  return page
-}
 
 export interface EventsQuery {
   since?: string | undefined
@@ -84,9 +74,9 @@ export class Workspace {
     return sessionId
   }
 
-  async renameSelf(displayName: string): Promise<Whoami> {
+  renameSelf(displayName: string): Whoami {
     this.account()
-    await this.store.renameAdmin(displayName)
+    this.store.renameAdmin(displayName)
     return this.whoami()
   }
 
@@ -108,13 +98,13 @@ export class Workspace {
     return this.store.listProjects().filter((project) => !restricted || project.id === restricted)
   }
 
-  createProject(name: string, description: string): Promise<Project> {
+  createProject(name: string, description: string): Project {
     this.access.write()
     this.access.unrestricted()
     return this.store.createProject(name, description, this.access.actor)
   }
 
-  renameProject(id: string, name: string): Promise<Project> {
+  renameProject(id: string, name: string): Project {
     this.access.write()
     this.access.project(id)
     return this.store.renameProject(id, name, this.access.actor)
@@ -145,7 +135,7 @@ export class Workspace {
     return this.store.settings.setProjectInstructions(projectId, text)
   }
 
-  setProjectDescription(id: string, description: string): Promise<Project> {
+  setProjectDescription(id: string, description: string): Project {
     this.access.write()
     this.access.project(id)
     return this.store.setProjectDescription(id, description, this.access.actor)
@@ -153,54 +143,45 @@ export class Workspace {
 
   listPages(projectId: string): PageSummary[] {
     this.access.project(projectId)
-    return this.store.listPages(projectId).map(publicSummary)
+    return this.store.listPages(projectId)
   }
 
-  async createPage(
-    projectId: string,
-    title: string,
-    body: string,
-    tags: readonly string[] = [],
-  ): Promise<Page> {
+  createPage(projectId: string, title: string, body: string, tags: readonly string[] = []): Page {
     this.access.write()
     this.access.project(projectId)
-    return publicPage(await this.store.createPage(projectId, title, body, this.access.actor, tags))
+    return this.store.createPage(projectId, title, body, this.access.actor, tags)
   }
 
-  async setTags(id: string, tags: readonly string[], ifRevision?: string): Promise<Page> {
+  setTags(id: string, tags: readonly string[], ifRevision?: string): Page {
     this.access.write()
     this.access.page(id)
-    return publicPage(await this.store.setTags(id, tags, ifRevision, this.access.actor))
+    return this.store.setTags(id, tags, ifRevision, this.access.actor)
   }
 
   listTags(projectId?: string): TagCount[] {
     return this.store.listTags(this.access.projectFilter(projectId))
   }
 
-  async readPage(
+  readPage(
     id: string,
     options: { sinceRevision?: string | undefined; includeBody?: boolean | undefined } = {},
-  ): Promise<PageRead> {
+  ): PageRead {
     this.access.page(id)
-    const stored = await this.store.readPage(id)
-    if (options.sinceRevision && options.sinceRevision === stored.revision) {
-      return { id: stored.id, revision: stored.revision, unchanged: true }
+    const page = this.store.readPage(id)
+    if (options.sinceRevision && options.sinceRevision === page.revision) {
+      return { id: page.id, revision: page.revision, unchanged: true }
     }
-    const page = publicPage(stored)
     const outline = outlineOf(page.body)
     return options.includeBody === false ? { ...pageMetadata(page), outline } : { ...page, outline }
   }
 
-  async exportPage(id: string): Promise<{ filename: string; markdown: string }> {
+  exportPage(id: string): { filename: string; markdown: string } {
     this.access.page(id)
-    const page = await this.store.readPage(id)
+    const page = this.store.readPage(id)
     return { filename: exportFileName(page.title), markdown: exportMarkdown(page.title, page.body) }
   }
 
-  async exportProject(
-    projectId: string,
-    pageIds?: readonly string[],
-  ): Promise<{ filename: string; zip: Buffer }> {
+  exportProject(projectId: string, pageIds?: readonly string[]): { filename: string; zip: Buffer } {
     this.access.project(projectId)
     const project = this.store.listProjects().find((entry) => entry.id === projectId)
     if (!project) throw new StoreError('not_found', 'Project not found')
@@ -209,68 +190,67 @@ export class Workspace {
     const chosen = wanted ? summaries.filter((page) => wanted.has(page.id)) : summaries
     if (chosen.length === 0) throw new StoreError('invalid', 'No pages to export')
     const taken = new Set<string>()
-    const entries = []
-    for (const summary of chosen) {
-      const page = await this.store.readPage(summary.id)
-      entries.push({
+    const entries = chosen.map((summary) => {
+      const page = this.store.readPage(summary.id)
+      return {
         name: exportFileName(page.title, taken),
         data: Buffer.from(exportMarkdown(page.title, page.body), 'utf8'),
         modified: new Date(page.updatedAt || Date.now()),
-      })
-    }
+      }
+    })
     return {
       filename: `${exportFileName(project.name).replace(/\.md$/, '')}.zip`,
       zip: buildZip(entries),
     }
   }
 
-  async editPage(id: string, change: PageChange, ifRevision?: string): Promise<Page> {
+  editPage(id: string, change: PageChange, ifRevision?: string): Page {
     this.access.write()
     this.access.page(id)
-    return publicPage(await this.store.editPage(id, change, ifRevision, this.access.actor))
+    return this.store.editPage(id, change, ifRevision, this.access.actor)
   }
 
-  async replacePage(id: string, body: string, ifRevision: string): Promise<Page> {
+  replacePage(id: string, body: string, ifRevision: string): Page {
     this.access.write()
     this.access.page(id)
-    return publicPage(await this.store.replacePage(id, body, ifRevision, this.access.actor))
+    return this.store.replacePage(id, body, ifRevision, this.access.actor)
   }
 
-  async renamePage(id: string, title: string, ifRevision?: string): Promise<Page> {
+  renamePage(id: string, title: string, ifRevision?: string): Page {
     this.access.write()
     this.access.page(id)
-    return publicPage(await this.store.renamePage(id, title, ifRevision, this.access.actor))
+    return this.store.renamePage(id, title, ifRevision, this.access.actor)
   }
 
-  history(id: string) {
+  history(id: string, query: HistoryQuery = {}): HistoryEntry[] {
     this.access.page(id)
-    return this.store.history(id)
+    return this.store.history(id, query)
   }
 
-  version(id: string, hash: string): Promise<PageVersion> {
+  version(id: string, versionId: string): PageVersion {
     this.access.page(id)
-    return this.store.readVersion(id, hash)
+    return this.store.readVersion(id, versionId)
   }
 
-  deletePage(id: string, ifRevision?: string): Promise<void> {
+  deletePage(id: string, ifRevision?: string): void {
     this.access.write()
     this.access.page(id)
-    return this.store.deletePage(id, ifRevision, this.access.actor)
+    this.store.deletePage(id, ifRevision, this.access.actor)
   }
 
-  async restore(id: string, hash: string, ifRevision: string): Promise<Page> {
+  restore(id: string, versionId: string, ifRevision: string): Page {
     this.access.write()
     this.access.page(id)
-    return publicPage(await this.store.restoreVersion(id, hash, ifRevision, this.access.actor))
+    return this.store.restoreVersion(id, versionId, ifRevision, this.access.actor)
   }
 
-  async diff(id: string, from: string, to?: string): Promise<{ diff: string }> {
+  diff(id: string, from: string, to?: string): { diff: string } {
     this.access.page(id)
     if (!from) throw new StoreError('invalid', 'from is required')
-    return { diff: await this.store.diff(id, from, to) }
+    return { diff: this.store.diff(id, from, to) }
   }
 
-  listPageThreads(pageId: string): Promise<Thread[]> {
+  listPageThreads(pageId: string): Thread[] {
     this.access.page(pageId)
     return this.store.threads.listForPage(pageId)
   }
@@ -279,44 +259,44 @@ export class Workspace {
     projectId?: string | undefined
     to?: string | undefined
     status?: ThreadStatus | undefined
-  }): Promise<PageThread[]> {
+  }): PageThread[] {
     return this.store.threads.list({
       ...filter,
       projectId: this.access.projectFilter(filter.projectId),
     })
   }
 
-  createThread(pageId: string, body: string, options: ThreadOptions = {}): Promise<Thread> {
+  createThread(pageId: string, body: string, options: ThreadOptions = {}): Thread {
     this.access.write()
     this.access.page(pageId)
     return this.store.threads.create(pageId, body, options, this.access.actor)
   }
 
-  reply(threadId: string, body: string): Promise<Thread> {
+  reply(threadId: string, body: string): Thread {
     this.access.write()
     this.access.thread(threadId)
     return this.store.threads.reply(threadId, body, this.access.actor)
   }
 
-  editMessage(threadId: string, messageId: string, body: string): Promise<Thread> {
+  editMessage(threadId: string, messageId: string, body: string): Thread {
     this.access.write()
     this.access.thread(threadId)
     return this.store.threads.editMessage(threadId, messageId, body, this.access.actor)
   }
 
-  deleteMessage(threadId: string, messageId: string): Promise<{ threadRemoved: boolean }> {
+  deleteMessage(threadId: string, messageId: string): { threadRemoved: boolean } {
     this.access.write()
     this.access.thread(threadId)
     return this.store.threads.deleteMessage(threadId, messageId, this.access.actor)
   }
 
-  reopen(threadId: string): Promise<Thread> {
+  reopen(threadId: string): Thread {
     this.access.write()
     this.access.thread(threadId)
     return this.store.threads.reopen(threadId, this.access.actor)
   }
 
-  resolve(threadId: string): Promise<Thread> {
+  resolve(threadId: string): Thread {
     this.access.write()
     this.access.thread(threadId)
     return this.store.threads.resolve(threadId, this.access.actor)

@@ -1,10 +1,6 @@
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp } from './app'
 import { cleanupStores, json, tempStore } from '../test-support'
-
-const exec = promisify(execFile)
 
 afterEach(cleanupStores)
 
@@ -198,8 +194,8 @@ describe('account management', () => {
 })
 
 describe('handles and display names', () => {
-  it('shows a renamed display name for old commits without touching the commit email', async () => {
-    const { store, send, login } = await secured()
+  it('keeps handles in history so a renamed display name applies to old versions', async () => {
+    const { send, login } = await secured()
     const { cookie } = await login()
     const project = await json(await send('POST', '/api/projects', { name: 'Alpha' }, { cookie }))
     const page = await json(
@@ -213,7 +209,7 @@ describe('handles and display names', () => {
     const before = await json(
       await send('GET', `/api/pages/${page.id}/history`, undefined, { cookie }),
     )
-    expect(before[0]).toMatchObject({ author: 'Tare B', handle: 'tare' })
+    expect(before[0]).toMatchObject({ actor: 'tare' })
 
     const renamed = await json(
       await send('PATCH', '/api/account', { displayName: 'Tare Belo' }, { cookie }),
@@ -229,19 +225,7 @@ describe('handles and display names', () => {
     const after = await json(
       await send('GET', `/api/pages/${page.id}/history`, undefined, { cookie }),
     )
-    expect(after.map((entry: { author: string }) => entry.author)).toEqual([
-      'Tare Belo',
-      'Tare Belo',
-    ])
-    expect(after.every((entry: { handle: string }) => entry.handle === 'tare')).toBe(true)
-
-    const repoDir = (store as unknown as { repoDir: string }).repoDir
-    const raw = await exec('git', ['-C', repoDir, 'log', '--format=%an|%ae', '--no-mailmap'])
-    expect(raw.stdout.trim().split('\n')).toEqual([
-      'Tare Belo|tare@relay.local',
-      'Tare B|tare@relay.local',
-      'Tare B|tare@relay.local',
-    ])
+    expect(after.every((entry: { actor: string }) => entry.actor === 'tare')).toBe(true)
   })
 
   it('resolves display names in the people directory and blocks handle clashes', async () => {

@@ -8,15 +8,17 @@ export interface LinkDraft {
   editing: boolean
 }
 
-const UNSAFE_SCHEME = /^(javascript|data|vbscript):/i
-const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i
+const SAFE_SCHEME = /^(https?|mailto):/i
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:(?!\d)/i
 const RELATIVE = /^(#|\/|\.\.?\/)/
+const OTHER_HOST = /^[/\\]{2}/
 const EMAIL = /^[^@\s/]+@[^@\s/]+\.[^@\s/]+$/
 const MARKDOWN_LINK = /\[([^\]]*)\]\(([^)\s]*)\)/g
 
 export function normalizeLink(input: string): string | null {
   const raw = input.trim()
-  if (!raw || UNSAFE_SCHEME.test(raw)) return null
+  if (!raw || OTHER_HOST.test(raw)) return null
+  if (HAS_SCHEME.test(raw) && !SAFE_SCHEME.test(raw)) return null
   let url = raw
   if (!HAS_SCHEME.test(raw) && !RELATIVE.test(raw)) {
     url = EMAIL.test(raw) ? `mailto:${raw}` : `https://${raw}`

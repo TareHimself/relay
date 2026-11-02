@@ -32,6 +32,7 @@ import { linkDraftFromSelection } from '../../editor/link'
 import { headingShortcut } from '../../editor/headingShortcut'
 import { CellCommentBar } from '../../editor/CellCommentBar'
 import { LinkHoverCard } from '../../editor/LinkHoverCard'
+import { rawHtml } from '../../editor/rawHtml'
 import { linkClicks } from '../../editor/linkClicks'
 import { linkKinds } from '../../editor/linkKinds'
 import { svgBlock } from '../../editor/svgBlock'
@@ -143,6 +144,7 @@ export function DocView({ page, projectName }: DocViewProps) {
       svgBlock,
       tableInserters,
       linkKinds,
+      rawHtml,
       linkClicks((path) => void navigate(path)),
     ],
     [bridge, navigate],

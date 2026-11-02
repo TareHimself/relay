@@ -1,4 +1,4 @@
-import { threadFileSchema, type Anchor, type Thread, type ThreadStatus } from '../shared/threads'
+import type { Anchor, Thread, ThreadStatus } from '../shared/threads'
 import { commonPrefixLength, commonSuffixLength } from '../shared/anchors'
 import { locateUnique } from './edits'
 import { StoreError } from './errors'
@@ -7,23 +7,6 @@ import { newId } from './ids'
 const CONTEXT_LENGTH = 32
 
 export type { Anchor, Thread, ThreadStatus }
-
-export function threadsPathFor(pagePath: string): string {
-  return pagePath.replace(/\.md$/, '.threads.json')
-}
-
-export function parseThreads(raw: string | null): Thread[] {
-  if (raw === null) return []
-  try {
-    return threadFileSchema.parse(JSON.parse(raw)).threads
-  } catch {
-    throw new StoreError('invalid', 'Thread file is malformed')
-  }
-}
-
-export function serializeThreads(threads: readonly Thread[]): string {
-  return `${JSON.stringify({ threads }, null, 2)}\n`
-}
 
 export function mentionsIn(body: string): string[] {
   const handles = Array.from(body.matchAll(/(?<![\w@])@([a-z0-9][\w-]*)/gi), (m) =>

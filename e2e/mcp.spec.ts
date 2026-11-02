@@ -167,12 +167,12 @@ test('history, diff, restore, search, events and delete', async ({ page }) => {
     edits: [{ find: 'version one', replace: 'version two' }],
   })
 
-  const history = (await agent.call('history', { id })).data as { hash: string }[]
+  const history = (await agent.call('history', { id })).data as { id: string }[]
   expect(history.length).toBeGreaterThanOrEqual(2)
-  const oldest = history.at(-1)!.hash
+  const oldest = history.at(-1)!.id
   const diff = await agent.call('diff', { id, from: oldest })
   expect(diff.data.diff).toContain('version two')
-  expect((await agent.call('read_version', { id, hash: oldest })).data.body).toContain(
+  expect((await agent.call('read_version', { id, versionId: oldest })).data.body).toContain(
     'version one',
   )
 
@@ -187,7 +187,7 @@ test('history, diff, restore, search, events and delete', async ({ page }) => {
 
   const restored = await agent.call('restore_version', {
     id,
-    hash: oldest,
+    versionId: oldest,
     ifRevision: edited.data.revision,
     includeBody: true,
   })

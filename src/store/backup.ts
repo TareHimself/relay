@@ -13,16 +13,17 @@ import { createGunzip, createGzip } from 'node:zlib'
 import Database from 'better-sqlite3'
 import tar from 'tar-stream'
 import { StoreError } from '../core/errors'
-import { Git } from './git'
+import { git } from './import-git'
 import { migrationsFolder, type RelayStore } from './relay-store'
 
-export const BACKUP_FORMAT = 1
+export const BACKUP_FORMAT = 2
+const LEGACY_FORMAT = 1
 
 export interface BackupManifest {
-  format: typeof BACKUP_FORMAT
+  format: number
   relayVersion: string
   createdAt: string
-  hasRepo: boolean
+  hasRepo?: boolean | undefined
   projects: number
   pages: number
   threads: number
@@ -139,7 +140,7 @@ function extractArchive(file: string, dest: string): Promise<void> {
 export async function writeBackup(store: RelayStore, outPath: string): Promise<BackupManifest> {
   const tmp = await fs.mkdtemp(join(tmpdir(), 'relay-backup-'))
   try {
-    const info = await store.snapshot(tmp)
+    const info = store.snapshot(tmp)
     const manifest: BackupManifest = {
       format: BACKUP_FORMAT,
       relayVersion: relayVersion(),
@@ -197,7 +198,7 @@ function assertMigrationsSupported(dbPath: string): void {
   }
 }
 
-export function pendingOperations(dbPath: string): Array<{ id: string; path: string }> {
+function pendingOperations(dbPath: string): Array<{ id: string; path: string }> {
   const db = readonlyDb(dbPath)
   try {
     return db.prepare("select id, path from operations where status = 'pending'").all() as Array<{
@@ -215,13 +216,8 @@ export function pendingOperations(dbPath: string): Array<{ id: string; path: str
 export async function isFreshDataDir(
   dataDir: string,
 ): Promise<{ fresh: true } | { fresh: false; reason: string }> {
-  const projects = join(dataDir, 'projects')
-  if (existsSync(join(projects, '.git'))) {
-    const hasCommits = await new Git(projects).run(['rev-parse', '--verify', 'HEAD']).then(
-      () => true,
-      () => false,
-    )
-    if (hasCommits) return { fresh: false, reason: 'projects/ already has history' }
+  if (existsSync(join(dataDir, 'projects', '.git'))) {
+    return { fresh: false, reason: 'projects/ holds a git repository from an older Relay' }
   }
   const dbPath = join(dataDir, 'db', 'state.db')
   if (existsSync(dbPath)) {
@@ -229,6 +225,8 @@ export async function isFreshDataDir(
     try {
       const row = db.prepare('select count(*) as n from users').get() as { n: number }
       if (row.n > 0) return { fresh: false, reason: 'db/state.db already has an account' }
+      const projects = db.prepare('select count(*) as n from projects').get() as { n: number }
+      if (projects.n > 0) return { fresh: false, reason: 'db/state.db already has projects' }
     } catch (error) {
       if (!isMissingTable(error)) throw error
     } finally {
@@ -240,18 +238,18 @@ export async function isFreshDataDir(
 
 async function restoreRepo(bundle: string, projects: string): Promise<void> {
   await fs.mkdir(projects, { recursive: true })
-  const git = new Git(projects)
-  await git.run(['init', '-q'])
-  await git.run(['bundle', 'verify', '-q', bundle])
-  await git.run(['fetch', '-q', '--update-head-ok', bundle, 'refs/*:refs/*'])
-  const heads = (await git.run(['bundle', 'list-heads', bundle]))
+  const run = (args: string[]) => git(projects, args).then((output) => output.trim())
+  await run(['init', '-q'])
+  await run(['bundle', 'verify', '-q', bundle])
+  await run(['fetch', '-q', '--update-head-ok', bundle, 'refs/*:refs/*'])
+  const heads = (await run(['bundle', 'list-heads', bundle]))
     .split('\n')
     .map((line) => line.trim().split(/\s+/, 2) as [string, string])
   const headSha = heads.find(([, ref]) => ref === 'HEAD')?.[0]
   const branch = heads.find(([sha, ref]) => sha === headSha && ref.startsWith('refs/heads/'))?.[1]
   if (!branch) throw new StoreError('invalid', 'The backup repository has no branch at HEAD')
-  await git.run(['symbolic-ref', 'HEAD', branch])
-  await git.run(['reset', '-q', '--hard'])
+  await run(['symbolic-ref', 'HEAD', branch])
+  await run(['reset', '-q', '--hard'])
 }
 
 async function moveAside(root: string, destination: string): Promise<void> {
@@ -293,7 +291,7 @@ export async function readBackup(
       throw new StoreError('invalid', 'Not a Relay backup: manifest.json is missing')
     }
     const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as BackupManifest
-    if (manifest.format !== BACKUP_FORMAT) {
+    if (manifest.format !== BACKUP_FORMAT && manifest.format !== LEGACY_FORMAT) {
       throw new StoreError('invalid', `Unsupported backup format ${String(manifest.format)}`)
     }
     const dbSource = join(tmp, 'state.db')
@@ -301,16 +299,21 @@ export async function readBackup(
       throw new StoreError('invalid', 'Not a Relay backup: state.db is missing')
     }
     assertMigrationsSupported(dbSource)
+    const legacy = manifest.format === LEGACY_FORMAT && manifest.hasRepo === true
     const projects = join(staging, 'projects')
-    if (manifest.hasRepo) await restoreRepo(join(tmp, 'repo.bundle'), projects)
-    else await fs.mkdir(projects, { recursive: true })
+    if (legacy) {
+      await restoreRepo(join(tmp, 'repo.bundle'), projects)
+      for (const operation of pendingOperations(dbSource)) {
+        log(
+          `The backup had an unfinished write for ${operation.path} (${operation.id}); it is not recovered.`,
+        )
+      }
+      log(
+        'This backup comes from a Relay that kept pages in git. They are imported on the next start.',
+      )
+    }
     await fs.mkdir(join(staging, 'db'), { recursive: true })
     await fs.copyFile(dbSource, join(staging, 'db', 'state.db'))
-    const blobs = join(tmp, 'blobs')
-    if (existsSync(blobs)) await fs.cp(blobs, join(projects, 'blobs'), { recursive: true })
-    for (const operation of pendingOperations(join(staging, 'db', 'state.db'))) {
-      log(`Backup has a pending write for ${operation.path} (${operation.id}); recovered on start.`)
-    }
     for (const suffix of ['-wal', '-shm']) {
       await fs.rm(join(staging, 'db', `state.db${suffix}`), { force: true })
     }
@@ -322,7 +325,7 @@ export async function readBackup(
       await moveAside(root, aside)
       log(`Previous data moved to ${aside}`)
     }
-    await fs.rename(projects, join(root, 'projects'))
+    if (legacy) await fs.rename(projects, join(root, 'projects'))
     await fs.rename(join(staging, 'db'), join(root, 'db'))
     return manifest
   } finally {
