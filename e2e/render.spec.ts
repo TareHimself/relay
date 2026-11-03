@@ -100,3 +100,24 @@ test('mermaid diagrams zoom into a lightbox and the source has a Done button', a
   await expect(page.locator('.cm-mermaid-block > svg')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Done' })).toHaveCount(0)
 })
+
+test('a click below a diagram lands on the clicked line', async ({ page }) => {
+  const diagram = ['```mermaid', 'graph LR', '  A --> B', '```']
+  const lines = ['first line', 'second line', 'third line', 'fourth line']
+  const body = [...diagram, '', ...diagram, '', ...diagram, '', ...lines].join('\n')
+  const { project, pages } = await seed(page, [{ title: 'Clicks', body }])
+  await openDoc(page, project.id, pages[0]!.id)
+  await expect(page.locator('.cm-mermaid-block > svg')).toHaveCount(3)
+  for (const text of lines) {
+    const line = page.locator('.cm-line', { hasText: text })
+    await line.scrollIntoViewIfNeeded()
+    const box = (await line.boundingBox())!
+    await page.mouse.click(box.x + 20, box.y + box.height * 0.8)
+    const landed = await page.evaluate(() => {
+      const node = document.getSelection()?.focusNode
+      const element = node instanceof Element ? node : node?.parentElement
+      return element?.closest('.cm-line')?.textContent ?? ''
+    })
+    expect(landed).toBe(text)
+  }
+})

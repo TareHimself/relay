@@ -191,6 +191,10 @@ export const globals = css`
     .cm-editor-host .cm-highlight {
       border-radius: var(--mantine-radius-sm);
     }
+    .cm-editor-host .cm-editor .cm-mermaid-block {
+      margin: 0;
+      padding: 1.25em 0.75em;
+    }
     .cm-editor-host .cm-image-widget,
     .cm-editor-host .cm-mermaid-block,
     .cm-editor-host .cm-image-menu {
